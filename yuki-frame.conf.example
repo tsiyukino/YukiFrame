@@ -1,0 +1,112 @@
+# Yuki-Frame v2.0 Configuration
+# Event-driven tool orchestration framework
+
+[core]
+# Logging configuration
+log_file = logs/yuki-frame.log
+log_level = INFO          # TRACE, DEBUG, INFO, WARN, ERROR, FATAL
+
+# Process management
+pid_file = yuki-frame.pid
+max_tools = 100
+message_queue_size = 1000
+
+# Debug and control (NEW in v2.0)
+enable_debug = no         # Enable debug tracing
+enable_remote_control = no  # Enable remote control API
+control_port = 9999       # Port for remote control (if enabled)
+
+# ============================================
+# Example Tools
+# ============================================
+
+# System Monitor
+[tool:monitor]
+command = python tools/monitor.py
+description = System resource monitor
+autostart = yes
+restart_on_crash = yes
+max_restarts = 5
+subscribe_to = ALERT
+
+# Logger Tool
+[tool:logger]
+command = python tools/logger.py
+description = Event logger
+autostart = yes
+restart_on_crash = yes
+max_restarts = 3
+subscribe_to = 
+
+# Alert Handler
+[tool:alerter]
+command = python tools/alerter.py
+description = Alert notification handler
+autostart = yes
+restart_on_crash = yes
+max_restarts = 3
+subscribe_to = ALERT,ERROR,WARNING
+
+# ============================================
+# Your Custom Tools
+# ============================================
+
+# Example: Email Watcher
+# [tool:email_watcher]
+# command = python /path/to/email_watcher.py
+# description = Monitors email inbox
+# autostart = yes
+# restart_on_crash = yes
+# max_restarts = 0
+# subscribe_to = 
+
+# Example: Calendar Manager
+# [tool:calendar]
+# command = python /path/to/calendar.py
+# description = Calendar event manager
+# autostart = yes
+# restart_on_crash = yes
+# max_restarts = 3
+# subscribe_to = NEW_EMAIL,ADD_CALENDAR
+
+# Example: On-Demand Tool (manual start)
+# [tool:backup]
+# command = /usr/local/bin/backup.sh
+# description = Backup utility
+# autostart = no          # Don't start automatically
+# restart_on_crash = no
+# subscribe_to = 
+
+# ============================================
+# Configuration Notes
+# ============================================
+
+# Tool Configuration Options:
+#   command           - Full path to executable (required)
+#   description       - Human-readable description
+#   autostart         - Start with framework (yes/no)
+#   restart_on_crash  - Auto-restart if crashes (yes/no)
+#   max_restarts      - Max restart attempts (0 = unlimited)
+#   subscribe_to      - Comma-separated event types
+
+# Event Subscriptions:
+#   subscribe_to = EVENT1,EVENT2,EVENT3
+#   Leave empty for no subscriptions
+
+# Path Guidelines:
+#   - Use absolute paths for commands
+#   - Make sure executables have execute permission
+#   - Test tools manually before adding to framework
+
+# Logging Levels:
+#   TRACE - Very detailed (development only)
+#   DEBUG - Detailed information
+#   INFO  - General information (recommended)
+#   WARN  - Warnings
+#   ERROR - Errors only
+#   FATAL - Fatal errors only
+
+# v2.0 Changes:
+#   - Control and debug are now built-in (no separate tools needed)
+#   - No need for control module or config sender
+#   - Simplified configuration
