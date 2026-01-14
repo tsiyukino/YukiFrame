@@ -122,11 +122,119 @@ bool config_get_bool(const char* section, const char* key, bool default_value) {
     return default_value;
 }
 
-int config_get_tools(ToolConfig** tools, int* count) {
-    // For now, return empty list
-    // TODO: Parse [tool:xxx] sections from config file
-    *tools = NULL;
-    *count = 0;
+int config_get_tools(ToolConfig** tools_out, int* count_out) {
+    if (!tools_out || !count_out) {
+        return FW_ERROR_INVALID_ARG;
+    }
+    
+    FILE* fp = fopen(current_config_file, "r");
+    if (!fp) {
+        *tools_out = NULL;
+        *count_out = 0;
+        return FW_ERROR_IO;
+    }
+    
+    // First pass: count tools
+    int tool_count = 0;
+    char line[MAX_LINE];
+    char section[MAX_SECTION] = "";
+    
+    while (fgets(line, sizeof(line), fp)) {
+        char* p = trim(line);
+        
+        if (*p == '[') {
+            char* end = strchr(p, ']');
+            if (end) {
+                *end = '\0';
+                strncpy(section, p + 1, sizeof(section) - 1);
+                
+                // Check if it's a tool section
+                if (strncmp(section, "tool:", 5) == 0) {
+                    tool_count++;
+                }
+            }
+        }
+    }
+    
+    if (tool_count == 0) {
+        fclose(fp);
+        *tools_out = NULL;
+        *count_out = 0;
+        return FW_OK;
+    }
+    
+    // Allocate tools array
+    ToolConfig* tools = (ToolConfig*)calloc(tool_count, sizeof(ToolConfig));
+    if (!tools) {
+        fclose(fp);
+        return FW_ERROR_MEMORY;
+    }
+    
+    // Second pass: parse tools
+    rewind(fp);
+    int current_tool = -1;
+    section[0] = '\0';
+    
+    while (fgets(line, sizeof(line), fp)) {
+        char* p = trim(line);
+        
+        // Skip comments and empty lines
+        if (*p == '#' || *p == ';' || *p == '\0') {
+            continue;
+        }
+        
+        // Section header
+        if (*p == '[') {
+            char* end = strchr(p, ']');
+            if (end) {
+                *end = '\0';
+                strncpy(section, p + 1, sizeof(section) - 1);
+                
+                // Check if it's a tool section
+                if (strncmp(section, "tool:", 5) == 0) {
+                    current_tool++;
+                    // Extract tool name (after "tool:")
+                    strncpy(tools[current_tool].name, section + 5, MAX_TOOL_NAME - 1);
+                    // Set defaults
+                    tools[current_tool].autostart = false;
+                    tools[current_tool].restart_on_crash = false;
+                    tools[current_tool].max_restarts = 3;
+                    tools[current_tool].subscriptions[0] = '\0';
+                }
+            }
+            continue;
+        }
+        
+        // Key=value pair for current tool
+        if (current_tool >= 0 && strncmp(section, "tool:", 5) == 0) {
+            char* eq = strchr(p, '=');
+            if (eq) {
+                *eq = '\0';
+                char* key = trim(p);
+                char* value = trim(eq + 1);
+                
+                if (strcmp(key, "command") == 0) {
+                    strncpy(tools[current_tool].command, value, MAX_COMMAND_LENGTH - 1);
+                } else if (strcmp(key, "description") == 0) {
+                    strncpy(tools[current_tool].description, value, 255);
+                } else if (strcmp(key, "autostart") == 0) {
+                    tools[current_tool].autostart = (strcmp(value, "yes") == 0 || strcmp(value, "true") == 0);
+                } else if (strcmp(key, "restart_on_crash") == 0) {
+                    tools[current_tool].restart_on_crash = (strcmp(value, "yes") == 0 || strcmp(value, "true") == 0);
+                } else if (strcmp(key, "max_restarts") == 0) {
+                    tools[current_tool].max_restarts = atoi(value);
+                } else if (strcmp(key, "subscribe_to") == 0) {
+                    strncpy(tools[current_tool].subscriptions, value, 511);
+                }
+            }
+        }
+    }
+    
+    fclose(fp);
+    
+    *tools_out = tools;
+    *count_out = tool_count;
+    
     return FW_OK;
 }
 
