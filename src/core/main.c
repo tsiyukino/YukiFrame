@@ -1,9 +1,9 @@
-#include "framework.h"
-#include "logger.h"
-#include "config.h"
-#include "tool.h"
-#include "event.h"
-#include "platform.h"
+#include "yuki_frame/framework.h"
+#include "yuki_frame/logger.h"
+#include "yuki_frame/config.h"
+#include "yuki_frame/tool.h"
+#include "yuki_frame/event.h"
+#include "yuki_frame/platform.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,7 +33,7 @@ void signal_handler(int sig) {
 // Print usage
 void print_usage(const char* prog_name) {
     printf("%s v%s - Event-driven tool orchestration framework\n\n", 
-           FRAMEWORK_NAME, FRAMEWORK_VERSION);
+           YUKI_FRAME_NAME, YUKI_FRAME_VERSION_STRING);
     printf("Usage: %s [OPTIONS]\n\n", prog_name);
     printf("Options:\n");
     printf("  -c, --config FILE    Configuration file (default: yuki-frame.conf)\n");
@@ -61,7 +61,7 @@ int framework_init(const char* config_file) {
         return ret;
     }
     
-    LOG_INFO("main", "%s v%s starting", FRAMEWORK_NAME, FRAMEWORK_VERSION);
+    LOG_INFO("main", "%s v%s starting", YUKI_FRAME_NAME, YUKI_FRAME_VERSION_STRING);
     
     // Initialize platform-specific code
     ret = platform_init();
@@ -169,12 +169,12 @@ void framework_shutdown(void) {
     platform_shutdown();
     logger_shutdown();
     
-    printf("%s shutdown complete\n", FRAMEWORK_NAME);
+    printf("%s shutdown complete\n", YUKI_FRAME_NAME);
 }
 
 // Get version
 const char* framework_version(void) {
-    return FRAMEWORK_VERSION;
+    return YUKI_FRAME_VERSION_STRING;
 }
 
 // Main entry point
@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-            printf("%s v%s\n", FRAMEWORK_NAME, FRAMEWORK_VERSION);
+            printf("%s v%s\n", YUKI_FRAME_NAME, YUKI_FRAME_VERSION_STRING);
             return 0;
         }
         else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--config") == 0) {

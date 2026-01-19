@@ -1,7 +1,7 @@
-#ifndef PLATFORM_H
-#define PLATFORM_H
+#ifndef YUKI_FRAME_PLATFORM_H
+#define YUKI_FRAME_PLATFORM_H
 
-#include "framework.h"
+#include "yuki_frame/framework.h"
 
 // Platform-specific process functions
 ProcessHandle platform_spawn_process(const char* command, int* stdin_fd, int* stdout_fd, int* stderr_fd);
@@ -23,4 +23,4 @@ void platform_sleep(int seconds);
 int platform_init(void);
 void platform_shutdown(void);
 
-#endif // PLATFORM_H
+#endif  // YUKI_FRAME_PLATFORM_H

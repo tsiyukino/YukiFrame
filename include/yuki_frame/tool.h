@@ -1,7 +1,7 @@
-#ifndef TOOL_H
-#define TOOL_H
+#ifndef YUKI_FRAME_TOOL_H
+#define YUKI_FRAME_TOOL_H
 
-#include "framework.h"
+#include "yuki_frame/framework.h"
 #include <time.h>
 
 // Tool status
@@ -74,4 +74,4 @@ void tool_check_health(void);
 Tool* tool_get_first(void);
 Tool* tool_get_next(void);
 
-#endif // TOOL_H
+#endif  // YUKI_FRAME_TOOL_H

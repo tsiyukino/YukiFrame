@@ -1,6 +1,6 @@
-#include "framework.h"
-#include "config.h"
-#include "logger.h"
+#include "yuki_frame/framework.h"
+#include "yuki_frame/config.h"
+#include "yuki_frame/logger.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +10,17 @@
 #define MAX_SECTION 64
 #define MAX_KEY 64
 #define MAX_VALUE 512
+#define MAX_CONFIG_ENTRIES 256
 
+// Configuration entry storage
+typedef struct {
+    char section[MAX_SECTION];
+    char key[MAX_KEY];
+    char value[MAX_VALUE];
+} ConfigEntry;
+
+static ConfigEntry config_entries[MAX_CONFIG_ENTRIES];
+static int config_entry_count = 0;
 static char current_config_file[256] = "";
 
 // Simple INI parser
@@ -36,6 +46,9 @@ int config_load(const char* config_file) {
         fprintf(stderr, "Failed to open config file: %s\n", config_file);
         return FW_ERROR_IO;
     }
+    
+    // Reset config storage
+    config_entry_count = 0;
     
     // Set defaults
     strncpy(g_config.log_file, "logs/yuki-frame.log", sizeof(g_config.log_file) - 1);
@@ -70,28 +83,39 @@ int config_load(const char* config_file) {
         
         // Key=value pair
         char* eq = strchr(p, '=');
-        if (eq && strcmp(section, "core") == 0) {
+        if (eq) {
             *eq = '\0';
             char* key = trim(p);
             char* value = trim(eq + 1);
             
-            if (strcmp(key, "log_file") == 0) {
-                strncpy(g_config.log_file, value, sizeof(g_config.log_file) - 1);
-            } else if (strcmp(key, "log_level") == 0) {
-                if (strcmp(value, "TRACE") == 0) g_config.log_level = LOG_TRACE;
-                else if (strcmp(value, "DEBUG") == 0) g_config.log_level = LOG_DEBUG;
-                else if (strcmp(value, "INFO") == 0) g_config.log_level = LOG_INFO;
-                else if (strcmp(value, "WARN") == 0) g_config.log_level = LOG_WARN;
-                else if (strcmp(value, "ERROR") == 0) g_config.log_level = LOG_ERROR;
-                else if (strcmp(value, "FATAL") == 0) g_config.log_level = LOG_FATAL;
-            } else if (strcmp(key, "pid_file") == 0) {
-                strncpy(g_config.pid_file, value, sizeof(g_config.pid_file) - 1);
-            } else if (strcmp(key, "max_tools") == 0) {
-                g_config.max_tools = atoi(value);
-            } else if (strcmp(key, "message_queue_size") == 0) {
-                g_config.message_queue_size = atoi(value);
-            } else if (strcmp(key, "enable_debug") == 0) {
-                g_config.enable_debug = (strcmp(value, "yes") == 0 || strcmp(value, "true") == 0);
+            // Store in generic config entries array
+            if (config_entry_count < MAX_CONFIG_ENTRIES) {
+                strncpy(config_entries[config_entry_count].section, section, MAX_SECTION - 1);
+                strncpy(config_entries[config_entry_count].key, key, MAX_KEY - 1);
+                strncpy(config_entries[config_entry_count].value, value, MAX_VALUE - 1);
+                config_entry_count++;
+            }
+            
+            // Also update g_config for core section (backward compatibility)
+            if (strcmp(section, "framework") == 0) {
+                if (strcmp(key, "log_file") == 0) {
+                    strncpy(g_config.log_file, value, sizeof(g_config.log_file) - 1);
+                } else if (strcmp(key, "log_level") == 0) {
+                    if (strcmp(value, "TRACE") == 0) g_config.log_level = LOG_TRACE;
+                    else if (strcmp(value, "DEBUG") == 0) g_config.log_level = LOG_DEBUG;
+                    else if (strcmp(value, "INFO") == 0) g_config.log_level = LOG_INFO;
+                    else if (strcmp(value, "WARN") == 0) g_config.log_level = LOG_WARN;
+                    else if (strcmp(value, "ERROR") == 0) g_config.log_level = LOG_ERROR;
+                    else if (strcmp(value, "FATAL") == 0) g_config.log_level = LOG_FATAL;
+                } else if (strcmp(key, "pid_file") == 0) {
+                    strncpy(g_config.pid_file, value, sizeof(g_config.pid_file) - 1);
+                } else if (strcmp(key, "max_tools") == 0) {
+                    g_config.max_tools = atoi(value);
+                } else if (strcmp(key, "message_queue_size") == 0) {
+                    g_config.message_queue_size = atoi(value);
+                } else if (strcmp(key, "enable_debug") == 0) {
+                    g_config.enable_debug = (strcmp(value, "yes") == 0 || strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+                }
             }
         }
     }
@@ -105,20 +129,38 @@ int config_reload(void) {
 }
 
 const char* config_get(const char* section, const char* key) {
-    (void)section;
-    (void)key;
+    if (!section || !key) {
+        return NULL;
+    }
+    
+    // Search through config entries
+    for (int i = 0; i < config_entry_count; i++) {
+        if (strcmp(config_entries[i].section, section) == 0 &&
+            strcmp(config_entries[i].key, key) == 0) {
+            return config_entries[i].value;
+        }
+    }
+    
     return NULL;
 }
 
 int config_get_int(const char* section, const char* key, int default_value) {
-    (void)section;
-    (void)key;
+    const char* value = config_get(section, key);
+    if (value) {
+        return atoi(value);
+    }
     return default_value;
 }
 
 bool config_get_bool(const char* section, const char* key, bool default_value) {
-    (void)section;
-    (void)key;
+    const char* value = config_get(section, key);
+    if (value) {
+        return (strcmp(value, "yes") == 0 || 
+                strcmp(value, "true") == 0 || 
+                strcmp(value, "1") == 0 ||
+                strcmp(value, "True") == 0 ||
+                strcmp(value, "YES") == 0);
+    }
     return default_value;
 }
 
@@ -148,8 +190,8 @@ int config_get_tools(ToolConfig** tools_out, int* count_out) {
                 *end = '\0';
                 strncpy(section, p + 1, sizeof(section) - 1);
                 
-                // Check if it's a tool section
-                if (strncmp(section, "tool:", 5) == 0) {
+                // Check if it's a tool section (format: tool.toolname)
+                if (strncmp(section, "tool.", 5) == 0) {
                     tool_count++;
                 }
             }
@@ -190,10 +232,10 @@ int config_get_tools(ToolConfig** tools_out, int* count_out) {
                 *end = '\0';
                 strncpy(section, p + 1, sizeof(section) - 1);
                 
-                // Check if it's a tool section
-                if (strncmp(section, "tool:", 5) == 0) {
+                // Check if it's a tool section (format: tool.toolname)
+                if (strncmp(section, "tool.", 5) == 0) {
                     current_tool++;
-                    // Extract tool name (after "tool:")
+                    // Extract tool name (after "tool.")
                     strncpy(tools[current_tool].name, section + 5, MAX_TOOL_NAME - 1);
                     // Set defaults
                     tools[current_tool].autostart = false;

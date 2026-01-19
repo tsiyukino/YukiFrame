@@ -1,14 +1,21 @@
 # Build artifacts
 build/
-obj/
 *.o
 *.obj
-*.exe
-*.dll
-*.so
-*.dylib
 *.a
 *.lib
+*.so
+*.dll
+*.dylib
+*.exe
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+_deps/
 
 # IDE
 .vscode/
@@ -16,40 +23,45 @@ obj/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
-Thumbs.db
-Desktop.ini
 
-# Logs and runtime
+# Logs
 *.log
-*.pid
 logs/
 
-# CMake
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-install_manifest.txt
-CPackConfig.cmake
-CPackSourceConfig.cmake
-_CPack_Packages/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-env/
-venv/
+# Configuration (keep examples)
+*.conf
+!*.conf.example
 
 # Package files
-*.tar.gz
-*.zip
 *.deb
 *.rpm
+*.zip
+*.tar.gz
+*.tgz
 
-# Config (keep example)
-yuki-frame.conf
-!yuki-frame.conf.example
+# Debug
+core
+core.*
+vgcore.*
+*.dSYM/
+
+# Testing
+Testing/
+tests/build/
+
+# Runtime
+*.pid
+*.lock
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Secrets
+*.key
+*.pem
+.env
+secrets.txt
+*_secret.*

@@ -1,328 +1,484 @@
-# Testing Yuki-Frame Communication
+# Testing and Debugging Guide
 
 ## Overview
 
-Two Python tools have been created to test event communication:
-- **sender.py** - Sends "Hello World" messages
-- **receiver.py** - Receives and prints messages
+Yuki-Frame includes a comprehensive test suite and debugging infrastructure to ensure code quality and facilitate development.
 
-## Test Files Created
+## Test Suite Structure
 
 ```
-yuki-frame-restructured/
-├── tools/
-│   ├── sender.py              ← Sends MESSAGE events
-│   └── receiver.py            ← Receives MESSAGE events
-├── test-tools.conf            ← Configuration for both tools
-├── test-integration.py        ← Python-based integration test
-├── test-manual.bat            ← Manual testing script
-└── test-standalone.bat        ← Standalone tool test
+tests/
+├── unit/                      # Unit tests
+│   ├── test_event.c          # Event bus tests
+│   ├── test_config.c         # Configuration tests
+│   ├── test_tool.c           # Tool management tests
+│   └── CMakeLists.txt        # Build configuration
+├── integration/               # Integration tests
+│   ├── test_integration.py   # Full workflow tests
+│   └── CMakeLists.txt        # Build configuration
+└── CMakeLists.txt            # Main test configuration
 ```
 
-## Quick Test (Python Integration Test)
+## Running Tests
 
-This simulates how the framework routes events:
+### Quick Start
 
-```cmd
-python test-integration.py
+**Windows:**
+```batch
+# Build and run all tests
+run-tests.bat
+
+# Or manually
+cd build
+ctest --output-on-failure
 ```
 
-**Expected output:**
-```
-==================================================
-Yuki-Frame Integration Test
-Testing: Sender -> Framework -> Receiver
-==================================================
+**Linux/macOS:**
+```bash
+# Build and run all tests
+./run-tests.sh
 
-[1/3] Starting Sender...
-[2/3] Starting Receiver...
-[3/3] Routing events...
-
-Framework is now routing events:
---------------------------------------------------
-[SENDER] [INFO] Sender tool started
-[RECEIVER] [INFO] Receiver tool started
-[RECEIVER] [INFO] Waiting for MESSAGE events...
-[SENDER] [INFO] Sending 'Hello World' message...
-[FRAMEWORK] Routing: MESSAGE from sender
-[RECEIVER] [INFO] ✅ RECEIVED MESSAGE from sender: 'Hello World'
-[SENDER] [INFO] Sending: Hello World #2
-[FRAMEWORK] Routing: MESSAGE from sender
-[RECEIVER] [INFO] ✅ RECEIVED MESSAGE from sender: 'Hello World #2'
-...
-
-✅ Successfully routed 5 messages!
+# Or manually
+cd build
+ctest --output-on-failure
 ```
 
-## Manual Tests
+### Running Specific Tests
 
-### Test 1: Sender Only
+```bash
+# Run only unit tests
+cd build
+ctest -R ".*_tests" --output-on-failure
 
-```cmd
-cd tools
-python sender.py
+# Run specific test
+cd build/tests/unit
+./test_event
+./test_config
+./test_tool
+
+# Run integration tests
+cd tests/integration
+python3 test_integration.py
 ```
 
-**Output:**
-```
-[INFO] Sender tool started
-[INFO] Sending 'Hello World' message...
-MESSAGE|sender|Hello World
-[INFO] Sending: Hello World #2
-MESSAGE|sender|Hello World #2
-...
-```
+### Verbose Output
 
-Press Ctrl+C to stop.
+```bash
+# Maximum verbosity
+cd build
+ctest -VV
 
-### Test 2: Receiver Only
-
-```cmd
-cd tools
-python receiver.py
+# Show test output even on success
+ctest --verbose
 ```
 
-Then type:
-```
-MESSAGE|sender|Hello World
-```
+## Unit Tests
 
-**Output:**
-```
-[INFO] Receiver tool started
-[INFO] Waiting for MESSAGE events...
-[INFO] ✅ RECEIVED MESSAGE from sender: 'Hello World'
-ACK|receiver|Received: Hello World
-```
+### Event Module Tests
 
-Press Ctrl+C to stop.
+Tests for event bus functionality:
+- Event bus initialization
+- Event publishing (valid/invalid)
+- Event parsing (valid/invalid formats)
+- Event formatting
+- Null pointer handling
+- Buffer overflow protection
 
-### Test 3: Manual Pipe Test
-
-```cmd
-cd tools
-echo MESSAGE^|sender^|Hello World | python receiver.py
+**Run:**
+```bash
+cd build/tests/unit
+./test_event
 ```
 
-**Output:**
+### Config Module Tests
+
+Tests for configuration management:
+- Config file loading
+- Value retrieval (string, int, bool)
+- Default values
+- Tool configuration parsing
+- Missing file handling
+
+**Run:**
+```bash
+cd build/tests/unit
+./test_config
 ```
-[INFO] Receiver tool started
-[INFO] Waiting for MESSAGE events...
-[INFO] ✅ RECEIVED MESSAGE from sender: 'Hello World'
-ACK|receiver|Received: Hello World
+
+### Tool Module Tests
+
+Tests for tool lifecycle management:
+- Tool registry operations
+- Tool registration/unregistration
+- Duplicate name handling
+- Tool lookup
+- Event subscription
+- Status checking
+
+**Run:**
+```bash
+cd build/tests/unit
+./test_tool
 ```
 
-## What Works Now
+## Integration Tests
 
-✅ **sender.py**
-- Starts successfully
-- Sends MESSAGE events to stdout
-- Event format: `MESSAGE|sender|Hello World`
-- Continues sending every 5 seconds
-- Handles SIGTERM gracefully
+End-to-end workflow tests:
+- Framework version check
+- Help system
+- Configuration loading
+- Invalid config handling
+- (More tests can be added)
 
-✅ **receiver.py**
-- Starts successfully
-- Reads events from stdin
-- Parses event format correctly
-- Prints received messages
-- Sends ACK events back
-- Handles SIGTERM gracefully
+**Run:**
+```bash
+cd tests/integration
+python3 test_integration.py
+```
 
-✅ **test-integration.py**
-- Spawns both tools
-- Routes events between them
-- Demonstrates full communication
-- Verifies message delivery
+## Writing New Tests
 
-## What Needs Implementation
-
-⚠️ **Framework Integration**
-
-To make this work with the actual framework, implement:
-
-### 1. Process Spawning (platform_windows.c)
+### Unit Test Template
 
 ```c
-ProcessHandle platform_spawn_process(const char* command, 
-    int* stdin_fd, int* stdout_fd, int* stderr_fd) {
-    // Use CreateProcess + CreatePipe
-    // See TESTING.md for example
+#include "yuki_frame/your_module.h"
+#include <stdio.h>
+#include <assert.h>
+
+static int tests_run = 0;
+static int tests_passed = 0;
+static int tests_failed = 0;
+
+#define TEST(name) \
+    static void test_##name(void); \
+    static void run_test_##name(void) { \
+        printf("  Running: %s ... ", #name); \
+        tests_run++; \
+        test_##name(); \
+        tests_passed++; \
+        printf("PASS\n"); \
+    } \
+    static void test_##name(void)
+
+#define ASSERT(condition) \
+    do { \
+        if (!(condition)) { \
+            printf("FAIL\n"); \
+            tests_failed++; \
+            tests_passed--; \
+            return; \
+        } \
+    } while(0)
+
+TEST(your_test_name) {
+    // Your test code
+    ASSERT(1 + 1 == 2);
+}
+
+int main(void) {
+    printf("\n=== Your Module Tests ===\n\n");
+    
+    run_test_your_test_name();
+    
+    printf("\n=== Test Summary ===\n");
+    printf("  Total:  %d\n", tests_run);
+    printf("  Passed: %d\n", tests_passed);
+    printf("  Failed: %d\n", tests_failed);
+    
+    return tests_failed == 0 ? 0 : 1;
 }
 ```
 
-### 2. Event Routing (event.c)
+### Adding Test to CMakeLists.txt
 
-```c
-void event_process_queue(void) {
-    // For each event in queue:
-    //   1. Find subscribed tools
-    //   2. Write event to tool's stdin
-    //   3. Read tool's stdout for new events
-}
-```
-
-### 3. Tool Integration (tool.c)
-
-```c
-int tool_start(const char* name) {
-    // Call platform_spawn_process
-    // Store file descriptors
-    // Add to event loop
-}
+```cmake
+# In tests/unit/CMakeLists.txt
+add_executable(test_your_module test_your_module.c ${FRAMEWORK_LIB_SOURCES})
+target_include_directories(test_your_module PRIVATE ${CMAKE_SOURCE_DIR}/include)
+if(WIN32)
+    target_link_libraries(test_your_module PRIVATE ws2_32)
+else()
+    target_link_libraries(test_your_module PRIVATE pthread rt)
+endif()
+add_test(NAME your_module_tests COMMAND test_your_module)
 ```
 
-## Integration Test Output Explained
+## Debugging
 
-```
-[SENDER] [INFO] Sender tool started
-```
-Sender process spawned successfully
+### Debug Build
 
-```
-[RECEIVER] [INFO] Receiver tool started
-```
-Receiver process spawned successfully
+```bash
+# Linux/macOS
+mkdir build-debug && cd build-debug
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+cmake --build .
 
+# Windows
+mkdir build-debug && cd build-debug
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+cmake --build . --config Debug
 ```
-[FRAMEWORK] Routing: MESSAGE from sender
-```
-Framework reads MESSAGE event from sender's stdout
 
-```
-[RECEIVER] [INFO] ✅ RECEIVED MESSAGE from sender: 'Hello World'
-```
-Framework writes event to receiver's stdin, receiver processes it
+### Debug Flags
 
-```
-ACK|receiver|Received: Hello World
-```
-Receiver sends acknowledgment back to framework
+The debug build includes:
+- `-g` - Debug symbols
+- `-O0` - No optimization
+- `-DDEBUG` - Debug macro defined
 
-## Configuration
+### Using GDB (Linux/macOS)
 
-**test-tools.conf:**
+```bash
+# Start with debugger
+cd build-debug
+gdb ./yuki-frame
+
+# In GDB:
+(gdb) break main
+(gdb) run -c ../yuki-frame.conf.example
+(gdb) next          # Step over
+(gdb) step          # Step into
+(gdb) print var     # Print variable
+(gdb) backtrace     # Show call stack
+(gdb) continue      # Continue execution
+```
+
+### Using LLDB (macOS)
+
+```bash
+# Start with debugger
+cd build-debug
+lldb ./yuki-frame
+
+# In LLDB:
+(lldb) breakpoint set --name main
+(lldb) run -c ../yuki-frame.conf.example
+(lldb) thread step-over
+(lldb) thread step-in
+(lldb) print var
+(lldb) bt          # Backtrace
+(lldb) continue
+```
+
+### Using Visual Studio Debugger (Windows)
+
+1. Open project in Visual Studio
+2. Set yuki-frame as startup project
+3. Set command arguments in project properties
+4. Press F5 to start debugging
+5. Use F10 (step over), F11 (step into)
+
+### Debug Logging
+
+Enable debug logging in config:
+
 ```ini
-[tool:sender]
-command = python tools/sender.py
-autostart = yes
-subscribe_to = ACK            # Sender subscribes to ACK events
-
-[tool:receiver]
-command = python tools/receiver.py
-autostart = yes
-subscribe_to = MESSAGE        # Receiver subscribes to MESSAGE events
+[framework]
+log_level = DEBUG
+enable_debug = true
 ```
 
-## Verifying Tools Work
-
-### Sender Verification
-
-```cmd
-python tools/sender.py
+Or via command line:
+```bash
+./yuki-frame -c config.conf --debug
 ```
 
-✅ Should output:
-- `[INFO] Sender tool started` to stderr
-- `MESSAGE|sender|Hello World` to stdout
-- New message every 5 seconds
+### Memory Debugging
 
-### Receiver Verification
-
-```cmd
-echo MESSAGE^|sender^|Test | python tools/receiver.py
+**Valgrind (Linux):**
+```bash
+valgrind --leak-check=full --show-leak-kinds=all ./yuki-frame -c config.conf
 ```
 
-✅ Should output:
-- `[INFO] Receiver tool started` to stderr
-- `[INFO] ✅ RECEIVED MESSAGE from sender: 'Test'` to stderr
-- `ACK|receiver|Received: Test` to stdout
+**AddressSanitizer:**
+```bash
+# Build with ASan
+cmake -DCMAKE_C_FLAGS="-fsanitize=address -g" ..
+cmake --build .
 
-## Event Flow
-
-```
-1. Sender runs:
-   └─> Writes to stdout: "MESSAGE|sender|Hello World"
-
-2. Framework reads sender's stdout
-   └─> Parses event: type=MESSAGE, sender=sender, data=Hello World
-
-3. Framework checks subscriptions
-   └─> Receiver subscribed to MESSAGE
-
-4. Framework writes to receiver's stdin
-   └─> "MESSAGE|sender|Hello World\n"
-
-5. Receiver reads from stdin
-   └─> Prints: "✅ RECEIVED MESSAGE from sender: 'Hello World'"
-   └─> Writes to stdout: "ACK|receiver|Received: Hello World"
-
-6. Framework reads receiver's stdout
-   └─> Routes ACK event to subscribers (sender subscribed to ACK)
+# Run
+./yuki-frame -c config.conf
 ```
 
-## Success Criteria
+### Debug API
 
-✅ **Tools work standalone** - Can run sender.py and receiver.py independently
-✅ **Event format correct** - `TYPE|sender|data` format works
-✅ **Integration test works** - Python test routes events successfully
-⚠️ **Framework integration** - Needs process spawning implementation
+Use the built-in debug functions:
 
-## Next Steps
+```c
+#include "yuki_frame/debug.h"
 
-1. ✅ Tools created and tested
-2. ✅ Integration test created
-3. ✅ Configuration created
-4. ⚠️ Implement process spawning in platform_windows.c
-5. ⚠️ Implement event routing in event.c
-6. ⚠️ Test with actual framework
+// Log debug event
+debug_log(DEBUG_TOOL_START, "my_tool", "Tool starting with config: %s", config);
 
-## Quick Commands Reference
+// Dump current state
+debug_dump_state();
 
-```cmd
-# Test integration (simulated framework)
-python test-integration.py
-
-# Test sender only
-python tools/sender.py
-
-# Test receiver only (type events manually)
-python tools/receiver.py
-
-# Pipe test
-echo MESSAGE^|sender^|Test | python tools/receiver.py
-
-# Run framework with test config (once implemented)
-build\Release\yuki-frame.exe -c test-tools.conf
+// Get recent debug events
+DebugEvent events[100];
+int count = debug_get_events(events, 100);
 ```
 
-## Expected Final Result
+## Performance Profiling
 
-Once process spawning is implemented:
+### gprof (Linux)
 
-```cmd
-build\Release\yuki-frame.exe -c test-tools.conf
+```bash
+# Build with profiling
+cmake -DCMAKE_C_FLAGS="-pg" ..
+cmake --build .
+
+# Run program
+./yuki-frame -c config.conf
+
+# Generate profile
+gprof yuki-frame gmon.out > analysis.txt
+less analysis.txt
 ```
 
-**Should show in logs:**
+### perf (Linux)
+
+```bash
+# Record
+perf record ./yuki-frame -c config.conf
+
+# Report
+perf report
+
+# Annotate
+perf annotate
 ```
-[INFO] [tool] Starting tool: sender
-[INFO] [tool] Starting tool: receiver  
-[INFO] [sender] Sender tool started
-[INFO] [receiver] Receiver tool started
-[INFO] [event] Published event: MESSAGE from sender
-[INFO] [event] Routing MESSAGE to receiver
-[INFO] [receiver] ✅ RECEIVED MESSAGE from sender: 'Hello World'
-[INFO] [event] Published event: ACK from receiver
-[INFO] [event] Routing ACK to sender
+
+### Instruments (macOS)
+
+1. Open Instruments.app
+2. Choose Time Profiler
+3. Select yuki-frame executable
+4. Click Record
+
+## Continuous Integration
+
+### Test in CI Pipeline
+
+```yaml
+# Example .github/workflows/test.yml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: |
+          mkdir build && cd build
+          cmake ..
+          cmake --build .
+      - name: Test
+        run: |
+          cd build
+          ctest --output-on-failure
 ```
 
-## Summary
+## Test Coverage
 
-- ✅ **sender.py**: Complete and working
-- ✅ **receiver.py**: Complete and working
-- ✅ **test-integration.py**: Complete and working
-- ✅ **Configuration**: Complete
-- ⚠️ **Framework**: Needs process spawning + event routing
+### Generate Coverage Report (Linux)
 
-**The tools are ready! They're waiting for the framework to spawn and connect them.** 🚀
+```bash
+# Build with coverage
+mkdir build-coverage && cd build-coverage
+cmake -DCMAKE_C_FLAGS="--coverage" ..
+cmake --build .
+
+# Run tests
+ctest
+
+# Generate report
+lcov --capture --directory . --output-file coverage.info
+genhtml coverage.info --output-directory coverage-html
+
+# View report
+firefox coverage-html/index.html
+```
+
+## Common Issues
+
+### Test Fails to Link
+
+**Problem:** Undefined references during test compilation
+
+**Solution:** Ensure all required source files are in `FRAMEWORK_LIB_SOURCES` in `tests/unit/CMakeLists.txt`
+
+### Test Crashes
+
+**Problem:** Segmentation fault or crash during test
+
+**Solution:**
+1. Run with debugger: `gdb ./test_module`
+2. Check for NULL pointers
+3. Verify initialization order
+4. Enable AddressSanitizer
+
+### Integration Test Can't Find Executable
+
+**Problem:** `test_integration.py` reports executable not found
+
+**Solution:**
+1. Ensure project is built: `./build.sh` or `build.bat`
+2. Check executable location matches script search paths
+3. Run from correct directory
+
+### Tests Pass Locally But Fail in CI
+
+**Problem:** Tests work on local machine but fail in CI
+
+**Solution:**
+1. Check file paths (absolute vs relative)
+2. Verify test doesn't depend on local config
+3. Ensure all dependencies are installed
+4. Check timing issues (add timeouts)
+
+## Best Practices
+
+### Unit Testing
+
+1. **Test one thing** - Each test should verify one behavior
+2. **Use descriptive names** - `test_config_load_invalid_file_fails`
+3. **Test edge cases** - NULL pointers, empty strings, large values
+4. **Keep tests fast** - Unit tests should run in milliseconds
+5. **No external dependencies** - Unit tests shouldn't need network, files, etc.
+
+### Integration Testing
+
+1. **Test realistic workflows** - Simulate actual usage
+2. **Clean up** - Remove temporary files, kill processes
+3. **Handle timeouts** - Don't let tests hang forever
+4. **Check both success and failure paths**
+5. **Use fixtures** - Prepare test environment before running
+
+### Debugging
+
+1. **Reproduce first** - Ensure you can reliably trigger the bug
+2. **Minimize test case** - Remove unrelated code
+3. **Use debug build** - Always debug with `-g -O0`
+4. **Check assumptions** - Verify your understanding with assertions
+5. **Read error messages** - They often tell you exactly what's wrong
+
+## Resources
+
+- **CTest Documentation:** https://cmake.org/cmake/help/latest/manual/ctest.1.html
+- **GDB Tutorial:** https://www.gnu.org/software/gdb/documentation/
+- **Valgrind Manual:** https://valgrind.org/docs/manual/manual.html
+- **AddressSanitizer:** https://github.com/google/sanitizers
+
+## Getting Help
+
+If tests fail or you need debugging help:
+
+1. Check this guide for common solutions
+2. Run with verbose output: `ctest -VV`
+3. Enable debug logging: `--debug` flag
+4. Check logs in `/var/log/yuki-frame/` or configured log location
+5. Review DEVELOPMENT.md for project structure
+6. Open an issue with test output and system details

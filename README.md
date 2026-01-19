@@ -242,6 +242,22 @@ cmake .. -G "Visual Studio 17 2022"
 cmake --build . --config Release
 ```
 
+## Testing
+
+Yuki-Frame includes a comprehensive test suite:
+
+```bash
+# Run all tests
+./run-tests.sh          # Linux/macOS
+run-tests.bat           # Windows
+
+# Or manually
+cd build
+ctest --output-on-failure
+```
+
+See **TESTING.md** for complete testing and debugging documentation.
+
 ## Documentation
 
 - **README.md** - This file (overview)

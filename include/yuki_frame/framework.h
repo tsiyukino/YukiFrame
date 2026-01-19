@@ -1,13 +1,16 @@
-#ifndef FRAMEWORK_H
-#define FRAMEWORK_H
+#ifndef YUKI_FRAME_FRAMEWORK_H
+#define YUKI_FRAME_FRAMEWORK_H
 
 #include <stddef.h>
 #include <stdbool.h>
 #include <time.h>
 
-// Version
-#define FRAMEWORK_VERSION "2.0.0"
-#define FRAMEWORK_NAME "Yuki-Frame"
+// Version information (Semantic Versioning)
+#define YUKI_FRAME_VERSION_MAJOR 2
+#define YUKI_FRAME_VERSION_MINOR 0
+#define YUKI_FRAME_VERSION_PATCH 0
+#define YUKI_FRAME_VERSION_STRING "2.0.0"
+#define YUKI_FRAME_NAME "Yuki-Frame"
 
 // Platform detection - don't redefine if already defined by CMake
 #ifndef PLATFORM_WINDOWS
@@ -149,4 +152,4 @@ void debug_log(DebugEventType type, const char* tool_name, const char* format, .
 void debug_dump_state(void);
 int debug_get_events(DebugEvent* events, int max_events);
 
-#endif // FRAMEWORK_H
+#endif  // YUKI_FRAME_FRAMEWORK_H

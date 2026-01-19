@@ -1,7 +1,7 @@
-#ifndef EVENT_H
-#define EVENT_H
+#ifndef YUKI_FRAME_EVENT_H
+#define YUKI_FRAME_EVENT_H
 
-#include "framework.h"
+#include "yuki_frame/framework.h"
 
 // Event structure
 typedef struct {
@@ -27,4 +27,4 @@ int event_parse(const char* line, Event* event);
 int event_format(const Event* event, char* buffer, size_t size);
 void event_process_queue(void);
 
-#endif // EVENT_H
+#endif  // YUKI_FRAME_EVENT_H

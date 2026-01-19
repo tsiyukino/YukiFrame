@@ -1,41 +1,59 @@
 @echo off
-REM Build script for Yuki-Frame v2.0 (Windows)
+REM Build script for Yuki-Frame (Windows)
 
-echo ====================================
-echo Building Yuki-Frame v2.0
-echo ====================================
+setlocal
+
+echo === Yuki-Frame Build Script ===
 echo.
 
-if not exist build mkdir build
-cd build
+REM Parse arguments
+set BUILD_TYPE=%1
+if "%BUILD_TYPE%"=="" set BUILD_TYPE=Release
 
-echo [1/2] Configuring...
-cmake .. -G "Visual Studio 17 2022" -A x64
-if errorlevel 1 goto error
+set BUILD_DIR=build
 
-echo [2/2] Building...
-cmake --build . --config Release
-if errorlevel 1 goto error
+echo Build type: %BUILD_TYPE%
+echo.
 
-cd ..
+REM Create build directory
+if not exist "%BUILD_DIR%" (
+    echo Creating build directory...
+    mkdir "%BUILD_DIR%"
+)
+
+cd "%BUILD_DIR%"
+
+REM Configure
+echo Configuring...
+cmake -DCMAKE_BUILD_TYPE=%BUILD_TYPE% .. || (
+    echo Configuration failed!
+    exit /b 1
+)
+
+REM Build
+echo Building...
+cmake --build . --config %BUILD_TYPE% || (
+    echo Build failed!
+    exit /b 1
+)
 
 echo.
-echo ====================================
-echo Build Complete!
-echo ====================================
+echo === Build successful! ===
 echo.
-echo Executable: build\Release\yuki-frame.exe
+if exist "%BUILD_DIR%\%BUILD_TYPE%\yuki-frame.exe" (
+    echo Executable: %BUILD_DIR%\%BUILD_TYPE%\yuki-frame.exe
+    echo.
+    echo To run:
+    echo   cd %BUILD_DIR%\%BUILD_TYPE% ^&^& yuki-frame.exe ..\..\yuki-frame.conf.example
+) else (
+    echo Executable: %BUILD_DIR%\yuki-frame.exe
+    echo.
+    echo To run:
+    echo   cd %BUILD_DIR% ^&^& yuki-frame.exe ..\yuki-frame.conf.example
+)
 echo.
-echo Next steps:
-echo   1. Copy yuki-frame.conf.example to yuki-frame.conf
-echo   2. Edit configuration
-echo   3. Run: build\Release\yuki-frame.exe -c yuki-frame.conf
+echo To install:
+echo   cd %BUILD_DIR% ^&^& cmake --install . --config %BUILD_TYPE%
 echo.
-pause
-exit /b 0
 
-:error
-echo.
-echo Build failed!
-pause
-exit /b 1
+endlocal

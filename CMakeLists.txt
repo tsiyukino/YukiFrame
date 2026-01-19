@@ -2,14 +2,20 @@ cmake_minimum_required(VERSION 3.10)
 
 project(yuki-frame 
     VERSION 2.0.0
-    DESCRIPTION "Event-driven tool orchestration framework with integrated control and debug"
+    DESCRIPTION "Event-driven tool orchestration framework"
     LANGUAGES C
 )
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Detect platform
+# Build type
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
+endif()
+
+# Platform detection
 if(WIN32)
     add_definitions(-DPLATFORM_WINDOWS -D_CRT_SECURE_NO_WARNINGS)
     message(STATUS "Building for Windows")
@@ -20,7 +26,7 @@ endif()
 
 # Compiler flags
 if(MSVC)
-    add_compile_options(/W4)
+    add_compile_options(/W4 /WX-)
 else()
     add_compile_options(-Wall -Wextra -Wpedantic)
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -33,7 +39,7 @@ endif()
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
-# Source files
+# Core source files
 set(FRAMEWORK_SOURCES
     src/core/main.c
     src/core/logger.c
@@ -46,9 +52,9 @@ set(FRAMEWORK_SOURCES
 
 # Platform-specific sources
 if(WIN32)
-    list(APPEND FRAMEWORK_SOURCES src/core/platform_windows.c)
+    list(APPEND FRAMEWORK_SOURCES src/platform/platform_windows.c)
 else()
-    list(APPEND FRAMEWORK_SOURCES src/core/platform_linux.c)
+    list(APPEND FRAMEWORK_SOURCES src/platform/platform_linux.c)
 endif()
 
 # Main executable
@@ -69,6 +75,11 @@ install(TARGETS yuki-frame
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
+install(DIRECTORY include/yuki_frame
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
+
 if(WIN32)
     set(CONFIG_DIR "C:/ProgramData/yuki-frame")
     set(LOG_DIR "C:/ProgramData/yuki-frame/logs")
@@ -87,17 +98,23 @@ install(FILES yuki-frame.conf.example
 
 install(FILES
     README.md
-    GETTING_STARTED.md
-    ARCHITECTURE.md
-    TOOL_DEVELOPMENT.md
+    DEVELOPMENT.md
     CHANGELOG.md
     DESTINATION ${CMAKE_INSTALL_DOCDIR}
 )
+
+# Testing
+enable_testing()
+add_subdirectory(tests)
 
 # Package generation
 set(CPACK_PACKAGE_NAME "yuki-frame")
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Event-driven tool orchestration framework")
+set(CPACK_PACKAGE_VENDOR "Yuki-Frame Project")
+set(CPACK_PACKAGE_CONTACT "maintainer@yuki-frame.example")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 
 if(WIN32)
     set(CPACK_GENERATOR "ZIP;NSIS")
@@ -107,9 +124,15 @@ endif()
 
 include(CPack)
 
+# Build summary
 message(STATUS "")
-message(STATUS "Yuki-Frame v${PROJECT_VERSION} Configuration:")
-message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
-message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "========================================")
+message(STATUS "Yuki-Frame v${PROJECT_VERSION} Build Configuration")
+message(STATUS "========================================")
+message(STATUS "  Platform:       ${CMAKE_SYSTEM_NAME}")
+message(STATUS "  Build type:     ${CMAKE_BUILD_TYPE}")
+message(STATUS "  C Compiler:     ${CMAKE_C_COMPILER_ID}")
 message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "  C Standard:     ${CMAKE_C_STANDARD}")
+message(STATUS "========================================")
 message(STATUS "")

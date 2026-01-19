@@ -1,7 +1,7 @@
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef YUKI_FRAME_LOGGER_H
+#define YUKI_FRAME_LOGGER_H
 
-#include "framework.h"
+#include "yuki_frame/framework.h"
 #include <stdarg.h>
 
 // Logger initialization
@@ -26,4 +26,4 @@ LogLevel logger_get_level(void);
 int logger_rotate(void);
 void logger_set_max_size(size_t max_bytes);
 
-#endif // LOGGER_H
+#endif  // YUKI_FRAME_LOGGER_H

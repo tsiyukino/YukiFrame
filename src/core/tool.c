@@ -1,6 +1,6 @@
-#include "framework.h"
-#include "tool.h"
-#include "logger.h"
+#include "yuki_frame/framework.h"
+#include "yuki_frame/tool.h"
+#include "yuki_frame/logger.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -28,6 +28,12 @@ void tool_registry_shutdown(void) {
 int tool_register(const char* name, const char* command) {
     if (!name || !command) {
         return FW_ERROR_INVALID_ARG;
+    }
+    
+    // Check if tool already exists
+    if (tool_find(name) != NULL) {
+        LOG_ERROR("tool", "Tool already registered: %s", name);
+        return FW_ERROR_ALREADY_EXISTS;
     }
     
     if (registry.count >= MAX_TOOLS) {

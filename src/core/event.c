@@ -1,6 +1,7 @@
-#include "framework.h"
-#include "event.h"
-#include "logger.h"
+#include "yuki_frame/framework.h"
+#include "yuki_frame/event.h"
+#include "yuki_frame/logger.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 

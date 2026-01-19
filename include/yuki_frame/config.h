@@ -1,7 +1,7 @@
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef YUKI_FRAME_CONFIG_H
+#define YUKI_FRAME_CONFIG_H
 
-#include "framework.h"
+#include "yuki_frame/framework.h"
 
 // Configuration parsing
 int config_load(const char* config_file);
@@ -24,4 +24,4 @@ typedef struct {
 int config_get_tools(ToolConfig** tools, int* count);
 void config_free_tools(ToolConfig* tools, int count);
 
-#endif // CONFIG_H
+#endif  // YUKI_FRAME_CONFIG_H

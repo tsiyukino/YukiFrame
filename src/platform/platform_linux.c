@@ -1,6 +1,6 @@
-#include "framework.h"
-#include "logger.h"
-#include "platform.h"
+#include "yuki_frame/framework.h"
+#include "yuki_frame/logger.h"
+#include "yuki_frame/platform.h"
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
