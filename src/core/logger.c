@@ -84,14 +84,15 @@ int logger_init(const char* log_filename, LogLevel level) {
         ensure_directory(directory);
     }
     
-    // Try to open log file
-    log_file = fopen(log_filename, "a");
+    // FIXED: Open log file in WRITE mode (truncate) instead of APPEND mode
+    // This clears the log on each startup
+    log_file = fopen(log_filename, "w");
     if (!log_file) {
         // Try current directory as fallback
         fprintf(stderr, "Failed to open log file: %s\n", log_filename);
         fprintf(stderr, "Trying current directory: yuki-frame.log\n");
         
-        log_file = fopen("yuki-frame.log", "a");
+        log_file = fopen("yuki-frame.log", "w");
         if (!log_file) {
             fprintf(stderr, "Failed to open fallback log file\n");
             return FW_ERROR_IO;
@@ -102,7 +103,7 @@ int logger_init(const char* log_filename, LogLevel level) {
     
     // Write startup message
     time_t now = time(NULL);
-    fprintf(log_file, "\n=== Logger initialized at %s", ctime(&now));
+    fprintf(log_file, "=== Yuki-Frame v%s started at %s", YUKI_FRAME_VERSION_STRING, ctime(&now));
     fflush(log_file);
     
     return FW_OK;
@@ -111,7 +112,7 @@ int logger_init(const char* log_filename, LogLevel level) {
 void logger_shutdown(void) {
     if (log_file) {
         time_t now = time(NULL);
-        fprintf(log_file, "=== Logger shutdown at %s", ctime(&now));
+        fprintf(log_file, "=== Yuki-Frame shutdown at %s", ctime(&now));
         fclose(log_file);
         log_file = NULL;
     }
@@ -121,9 +122,6 @@ void logger_log(LogLevel level, const char* component, const char* format, ...) 
     if (!component || !format) {
         return;
     }
-    
-    // If log file not open, try stderr
-    FILE* output = log_file ? log_file : stderr;
     
     if (level < current_level) {
         return;
@@ -135,18 +133,27 @@ void logger_log(LogLevel level, const char* component, const char* format, ...) 
     char timestamp[32];
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_info);
     
-    // Print level, component, and timestamp
-    fprintf(output, "%s [%s] [%s] ", 
-            timestamp, log_level_string(level), component);
-    
-    // Print message
+    // Build message
+    char message[MAX_LOG_MESSAGE];
     va_list args;
     va_start(args, format);
-    vfprintf(output, format, args);
+    vsnprintf(message, sizeof(message), format, args);
     va_end(args);
     
-    fprintf(output, "\n");
-    fflush(output);
+    // FIXED: Print to BOTH file AND stderr (so you can see it in console)
+    const char* level_str = log_level_string(level);
+    
+    // Write to log file
+    if (log_file) {
+        fprintf(log_file, "%s [%s] [%s] %s\n", 
+                timestamp, level_str, component, message);
+        fflush(log_file);
+    }
+    
+    // ALSO write to stderr (console) for INFO and above
+    if (level >= LOG_INFO) {
+        fprintf(stderr, "[%s] [%s] %s\n", level_str, component, message);
+    }
 }
 
 void logger_log_tool(const char* tool_name, LogLevel level, const char* message) {

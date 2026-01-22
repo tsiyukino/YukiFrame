@@ -97,7 +97,7 @@ int config_load(const char* config_file) {
             }
             
             // Also update g_config for core section (backward compatibility)
-            if (strcmp(section, "framework") == 0) {
+            if (strcmp(section, "core") == 0 || strcmp(section, "framework") == 0) {
                 if (strcmp(key, "log_file") == 0) {
                     strncpy(g_config.log_file, value, sizeof(g_config.log_file) - 1);
                 } else if (strcmp(key, "log_level") == 0) {
@@ -190,8 +190,9 @@ int config_get_tools(ToolConfig** tools_out, int* count_out) {
                 *end = '\0';
                 strncpy(section, p + 1, sizeof(section) - 1);
                 
-                // Check if it's a tool section (format: tool.toolname)
-                if (strncmp(section, "tool.", 5) == 0) {
+                // Check if it's a tool section (format: tool:toolname)
+                // FIXED: Changed from "tool." to "tool:"
+                if (strncmp(section, "tool:", 5) == 0) {
                     tool_count++;
                 }
             }
@@ -232,10 +233,11 @@ int config_get_tools(ToolConfig** tools_out, int* count_out) {
                 *end = '\0';
                 strncpy(section, p + 1, sizeof(section) - 1);
                 
-                // Check if it's a tool section (format: tool.toolname)
-                if (strncmp(section, "tool.", 5) == 0) {
+                // Check if it's a tool section (format: tool:toolname)
+                // FIXED: Changed from "tool." to "tool:"
+                if (strncmp(section, "tool:", 5) == 0) {
                     current_tool++;
-                    // Extract tool name (after "tool.")
+                    // Extract tool name (after "tool:")
                     strncpy(tools[current_tool].name, section + 5, MAX_TOOL_NAME - 1);
                     // Set defaults
                     tools[current_tool].autostart = false;

@@ -102,7 +102,10 @@ int framework_init(const char* config_file) {
     int tool_count;
     ret = config_get_tools(&tools, &tool_count);
     if (ret == FW_OK) {
+        LOG_INFO("main", "Found %d tools in configuration", tool_count);
+        
         for (int i = 0; i < tool_count; i++) {
+            LOG_INFO("main", "Registering tool: %s", tools[i].name);
             tool_register(tools[i].name, tools[i].command);
             
             // Subscribe to events
@@ -110,6 +113,8 @@ int framework_init(const char* config_file) {
                 char* subs = strdup(tools[i].subscriptions);
                 char* token = strtok(subs, ",");
                 while (token) {
+                    // Trim whitespace
+                    while (*token == ' ') token++;
                     tool_subscribe(tools[i].name, token);
                     token = strtok(NULL, ",");
                 }
@@ -118,23 +123,61 @@ int framework_init(const char* config_file) {
             
             // Autostart if configured
             if (tools[i].autostart) {
-                tool_start(tools[i].name);
+                LOG_INFO("main", "Auto-starting tool: %s", tools[i].name);
+                int start_result = tool_start(tools[i].name);
+                if (start_result != FW_OK) {
+                    LOG_ERROR("main", "Failed to start tool: %s (error %d)", tools[i].name, start_result);
+                }
             }
         }
         config_free_tools(tools, tool_count);
+    } else {
+        LOG_WARN("main", "No tools found in configuration");
     }
     
     LOG_INFO("main", "Framework initialized successfully");
     return FW_OK;
 }
 
-// Main loop
+// FIXED: Main loop now reads tool output
 void framework_run(void) {
     LOG_INFO("main", "Entering main loop");
+    
+    char buffer[4096];
     
     while (g_running) {
         // Process events
         event_process_queue();
+        
+        // FIXED: Read from tool stdout/stderr
+        Tool* tool = tool_get_first();
+        while (tool) {
+            if (tool->status == TOOL_RUNNING) {
+                // Read stdout
+                if (tool->stdout_fd >= 0) {
+                    int bytes = platform_read_nonblocking(tool->stdout_fd, buffer, sizeof(buffer) - 1);
+                    if (bytes > 0) {
+                        buffer[bytes] = '\0';
+                        LOG_DEBUG("main", "Tool %s stdout: %s", tool->name, buffer);
+                        // TODO: Parse as event and publish
+                    }
+                }
+                
+                // Read stderr (logs)
+                if (tool->stderr_fd >= 0) {
+                    int bytes = platform_read_nonblocking(tool->stderr_fd, buffer, sizeof(buffer) - 1);
+                    if (bytes > 0) {
+                        buffer[bytes] = '\0';
+                        // Remove trailing newline
+                        char* newline = strchr(buffer, '\n');
+                        if (newline) *newline = '\0';
+                        LOG_INFO(tool->name, "%s", buffer);
+                    }
+                }
+            }
+            
+            tool = tool_get_next();
+        }
         
         // Check tool health
         tool_check_health();
@@ -221,6 +264,7 @@ int main(int argc, char** argv) {
     // Override debug if command line flag set
     if (debug_mode) {
         g_config.enable_debug = true;
+        logger_set_level(LOG_DEBUG);
         debug_init();
     }
     

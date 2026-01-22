@@ -12,6 +12,7 @@
 
 ### ✨ New Features
 - Built-in tool lifecycle management (start/stop/restart)
+- **Manual tool control** with `yuki-control` utility
 - Real-time tool status monitoring
 - Event tracing and debugging
 - Health checks and automatic restart
@@ -23,16 +24,28 @@
 - **Faster**: Direct integration, no IPC overhead  
 - **Reliable**: Core features can't crash independently
 - **Easier**: Unified configuration and control
+- **Flexible**: Start tools automatically or manually on-demand
 
 ## Quick Start
 
 ### 1. Build
 
 ```bash
+# Linux/macOS
+./build.sh
+
+# Windows
+build.bat
+
+# Or manually
 mkdir build && cd build
 cmake ..
 cmake --build .
 ```
+
+This creates two executables:
+- `yuki-frame` - Main framework
+- `yuki-control` - Control utility for manual tool management
 
 ### 2. Configure
 
@@ -44,17 +57,48 @@ log_file = logs/yuki-frame.log
 log_level = INFO
 enable_debug = yes
 
-[tool:my_tool]
-command = python tools/my_tool.py
-autostart = yes
+[tool:monitor]
+command = python tools/monitor.py
+autostart = yes              # Starts automatically with framework
 restart_on_crash = yes
-subscribe_to = EVENT_TYPE
+subscribe_to = ALERT
+
+[tool:backup]
+command = python tools/backup.py
+autostart = no               # Start manually when needed
+restart_on_crash = no
+subscribe_to = 
 ```
 
-### 3. Run
+### 3. Run Framework
 
 ```bash
-./yuki-frame -c yuki-frame.conf
+# Linux/macOS
+./build/yuki-frame -c yuki-frame.conf
+
+# Windows
+build\Release\yuki-frame.exe -c yuki-frame.conf
+```
+
+### 4. Control Tools Manually
+
+In another terminal:
+
+```bash
+# Start a tool
+yuki-control start backup
+
+# Stop a tool
+yuki-control stop backup
+
+# Restart a tool
+yuki-control restart monitor
+
+# List all tools
+yuki-control list
+
+# Get detailed status
+yuki-control status monitor
 ```
 
 ## Architecture
@@ -72,68 +116,121 @@ subscribe_to = EVENT_TYPE
 └─────────────────────────────────────────┘
           ↓           ↓           ↓
     [Tool A]      [Tool B]      [Tool C]
+         ↑                           ↑
+         └───── yuki-control ────────┘
+         (manual start/stop/restart)
 ```
 
 ## Core Features
 
-### Control System (Built-in)
-```c
-// Start/stop/restart tools
-control_start_tool("my_tool");
-control_stop_tool("my_tool");
-control_restart_tool("my_tool");
+### Manual Tool Control (NEW!)
 
-// Get status
-char status[1024];
-control_get_status("my_tool", status, sizeof(status));
+Control tools while framework is running:
 
-// List all tools
-char list[4096];
-control_list_tools(list, sizeof(list));
+```bash
+# Start framework
+yuki-frame -c config.conf
+
+# In another terminal, control tools:
+yuki-control start my_tool      # Start tool on-demand
+yuki-control stop my_tool       # Stop running tool
+yuki-control restart my_tool    # Restart tool
+yuki-control list              # List all tools and status
+yuki-control status my_tool    # Show detailed tool status
 ```
 
-### Debug System (Built-in)
-```c
-// Enable debug mode
-./yuki-frame -d
+**Example output:**
+```
+$ yuki-control list
+Registered Tools:
+-----------------
+monitor              RUNNING    PID: 1234
+sender               RUNNING    PID: 5678
+backup               STOPPED    PID: 0
 
-// Debug logging
-debug_log(DEBUG_TOOL_START, "my_tool", "Started with PID %d", pid);
-debug_log(DEBUG_EVENT_PUBLISH, "my_tool", "Event: %s", event_type);
-
-// Dump debug state
-debug_dump_state();
+$ yuki-control status monitor
+Tool Status:
+------------
+Tool: monitor
+Status: RUNNING
+PID: 1234
+Events Sent: 42
+Events Received: 0
+Restart Count: 0
 ```
 
-### Logging (Built-in)
+### Automatic Tool Management
+
+Tools with `autostart = yes` start automatically:
+
+```ini
+[tool:monitor]
+command = python tools/monitor.py
+autostart = yes              # Starts with framework
+restart_on_crash = yes       # Auto-restarts if crashes
+max_restarts = 5            # Max restart attempts
+```
+
+### Debug System
+
+```bash
+# Enable debug mode
+./yuki-frame -d -c config.conf
+
+# Debug logging shows:
+# - Tool start/stop events
+# - Event routing
+# - Process spawning
+# - Health checks
+```
+
+### Logging
+
 ```c
 LOG_INFO("component", "Message");
 LOG_ERROR("component", "Error: %s", error);
 LOG_DEBUG("component", "Details: %d", value);
 ```
 
+All tool stdout/stderr captured in framework logs.
+
 ## Tool Development
 
-Tools work the same as before:
+Tools communicate via standard I/O:
 
 ```python
 #!/usr/bin/env python3
 import sys
+import signal
 
-# Log to stderr
+running = True
+
+def signal_handler(sig, frame):
+    global running
+    running = False
+
+signal.signal(signal.SIGTERM, signal_handler)
+
+# Log to stderr (captured by framework)
 print("[INFO] Tool started", file=sys.stderr)
 
 # Emit events to stdout
-print("EVENT_TYPE|my_tool|data")
+print("STATUS|my_tool|System OK")
 sys.stdout.flush()
 
 # Read events from stdin
 for line in sys.stdin:
+    if not running:
+        break
+    
     event_type, sender, data = line.strip().split('|', 2)
     # Process event
+    print(f"[INFO] Received {event_type}", file=sys.stderr)
+
+print("[INFO] Tool stopped", file=sys.stderr)
 ```
 
-See `TOOL_DEVELOPMENT.md` for complete guide.
+**Complete guide**: See `TOOL_DEVELOPMENT.md`
 
 ## Configuration
 
@@ -156,10 +253,10 @@ control_port = 9999
 [tool:my_tool]
 command = /path/to/tool
 description = Tool description
-autostart = yes
-restart_on_crash = yes
-max_restarts = 3
-subscribe_to = EVENT1,EVENT2
+autostart = yes         # Start automatically (yes/no)
+restart_on_crash = yes  # Auto-restart on crash (yes/no)
+max_restarts = 3       # Max restart attempts (0 = unlimited)
+subscribe_to = EVENT1,EVENT2  # Event subscriptions
 ```
 
 ## Migration from v1.0
@@ -177,7 +274,7 @@ subscribe_to = COMMAND,CONFIG
 **v2.0 (New)**:
 ```ini
 # Control is built-in, no configuration needed!
-# Just use the core features directly
+# Use yuki-control utility for manual control
 ```
 
 ### Migration Steps
@@ -188,26 +285,11 @@ subscribe_to = COMMAND,CONFIG
 4. **Rebuild** with new CMakeLists.txt
 5. **Test** - everything else works the same!
 
-### API Changes
-
-**Old (v1.0)**:
-```
-Send "START_TOOL|control|tool_name" event
-Wait for "RESPONSE|control|..." event
-```
-
-**New (v2.0)**:
-```c
-// Direct API call
-control_start_tool("tool_name");
-
-// Or use control protocol (compatible)
-ControlRequest req = {.command = CMD_START_TOOL, ...};
-ControlResponse res;
-control_process_command(&req, &res);
-```
+See `CHANGELOG.md` for complete migration guide.
 
 ## Command Line
+
+### Framework
 
 ```bash
 # Start framework
@@ -223,11 +305,37 @@ yuki-frame -v
 yuki-frame -h
 ```
 
+### Control Utility
+
+```bash
+# Start a tool
+yuki-control start tool_name
+
+# Stop a tool
+yuki-control stop tool_name
+
+# Restart a tool
+yuki-control restart tool_name
+
+# List all tools
+yuki-control list
+
+# Show tool status
+yuki-control status tool_name
+
+# Help
+yuki-control help
+```
+
 ## Building
 
 ### Linux/macOS
 
 ```bash
+./build.sh              # Release build
+./build.sh Debug        # Debug build
+
+# Or manually
 mkdir build && cd build
 cmake ..
 cmake --build .
@@ -237,10 +345,18 @@ sudo cmake --install .
 ### Windows
 
 ```bash
+build.bat              # Release build
+build.bat Debug        # Debug build
+
+# Or manually
 mkdir build && cd build
 cmake .. -G "Visual Studio 17 2022"
 cmake --build . --config Release
 ```
+
+**Output:**
+- `build/yuki-frame` (or `build\Release\yuki-frame.exe`)
+- `build/yuki-control` (or `build\Release\yuki-control.exe`)
 
 ## Testing
 
@@ -256,35 +372,225 @@ cd build
 ctest --output-on-failure
 ```
 
-See **TESTING.md** for complete testing and debugging documentation.
+See `TESTING.md` for complete testing guide.
 
 ## Documentation
 
-- **README.md** - This file (overview)
-- **GETTING_STARTED.md** - Quick start guide
-- **TOOL_DEVELOPMENT.md** - How to write tools
-- **ARCHITECTURE.md** - System design
-- **CHANGELOG.md** - Version history
+| Document | Description |
+|----------|-------------|
+| `README.md` | This file (overview and quick start) |
+| `TOOL_DEVELOPMENT.md` | **Complete guide to writing tools** |
+| `DEVELOPMENT.md` | Framework development and contribution guide |
+| `TESTING.md` | Testing and debugging guide |
+| `CHANGELOG.md` | Version history and migration guides |
+| `LICENSE` | MIT License |
+
+### Example Tools
+
+See `tools/` directory for working examples:
+- `monitor.py` - System monitoring with periodic events
+- `echo.py` - Simple event echo
+- `alerter.py` - Alert handling
+- `sender.py` - Event publisher
+- `receiver.py` - Event subscriber
+
+## Use Cases
+
+### On-Demand Tools
+
+Tools that run only when needed:
+
+```ini
+[tool:backup]
+command = python tools/backup.py
+autostart = no          # Don't start automatically
+restart_on_crash = no
+```
+
+```bash
+# Run backup when needed
+yuki-control start backup
+# ... backup runs ...
+yuki-control stop backup
+```
+
+### Always-Running Tools
+
+Tools that should always be active:
+
+```ini
+[tool:monitor]
+command = python tools/monitor.py
+autostart = yes         # Start with framework
+restart_on_crash = yes  # Restart if crashes
+max_restarts = 10      # Up to 10 restart attempts
+```
+
+### Event-Driven Workflows
+
+Tools communicate via events:
+
+```ini
+[tool:watcher]
+command = python tools/file_watcher.py
+autostart = yes
+subscribe_to =          # Publishes FILE_CHANGED events
+
+[tool:processor]
+command = python tools/process_file.py
+autostart = yes
+subscribe_to = FILE_CHANGED  # Processes files when changed
+
+[tool:notifier]
+command = python tools/notifier.py
+autostart = yes
+subscribe_to = FILE_PROCESSED  # Sends notifications
+```
 
 ## Troubleshooting
 
-### Control module not found
-✅ **Fixed in v2.0** - Control is built-in, no separate module!
-
 ### Tools not starting
-Check logs: `tail -f logs/yuki-frame.log`
+
+**Check logs:**
+```bash
+tail -f logs/yuki-frame.log
+```
+
+**Common issues:**
+- Python not in PATH → Use full path: `C:\Python39\python.exe tools\tool.py`
+- Tool file not found → Use absolute paths in config
+- Permission denied → `chmod +x tools/tool.py` (Linux)
+
+### yuki-control not found
+
+```bash
+# Use full path
+./build/yuki-control start my_tool
+
+# Or from build directory
+cd build
+./yuki-control start my_tool
+```
 
 ### Events not routing
+
 1. Check subscription: `subscribe_to = EVENT_TYPE`
 2. Check event format: `TYPE|sender|data`
 3. Enable debug: `./yuki-frame -d`
+4. Check logs for event routing
+
+### Tool crashes immediately
+
+```bash
+# Test tool manually first
+python tools/my_tool.py
+
+# Check for errors
+# Then add to framework
+```
+
+## Platform Support
+
+- ✅ **Linux** (tested on Ubuntu 20.04+)
+- ✅ **Windows** (tested on Windows 10/11)
+- ✅ **macOS** (should work, tested on macOS 12+)
+- ✅ **BSD** (should work)
+
+## Installation
+
+### From Source
+
+```bash
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake --build .
+sudo cmake --install .
+```
+
+Installs:
+- `/usr/local/bin/yuki-frame`
+- `/usr/local/bin/yuki-control`
+- `/usr/local/include/yuki_frame/`
+- `/etc/yuki-frame/yuki-frame.conf.example`
+
+### Package Installation
+
+```bash
+# Ubuntu/Debian
+sudo dpkg -i yuki-frame_2.0.0_amd64.deb
+
+# RPM-based
+sudo rpm -i yuki-frame-2.0.0.x86_64.rpm
+
+# Windows
+# Run installer: yuki-frame-2.0.0-win64.exe
+```
 
 ## License
 
-MIT License - See LICENSE file
+MIT License - See `LICENSE` file for details.
+
+## Contributing
+
+We welcome contributions! See `DEVELOPMENT.md` for:
+- Development setup
+- Coding standards
+- Testing requirements
+- Pull request process
 
 ## Support
 
-- GitHub Issues: [Report bugs]
-- Documentation: See `docs/` folder
-- Examples: See `examples/` folder
+- **Documentation**: See `docs/` folder and markdown files
+- **Examples**: See `examples/` and `tools/` directories
+- **Issues**: Report bugs via GitHub issues
+- **Questions**: Open a discussion on GitHub
+
+## Links
+
+- **Repository**: https://github.com/your-org/yuki-frame
+- **Documentation**: https://yuki-frame.readthedocs.io
+- **Releases**: https://github.com/your-org/yuki-frame/releases
+
+## Version
+
+Current version: **2.0.0** (Released January 2026)
+
+See `CHANGELOG.md` for complete version history.
+
+---
+
+## Quick Reference
+
+### Start Framework
+```bash
+yuki-frame -c yuki-frame.conf
+```
+
+### Control Tools
+```bash
+yuki-control start tool_name     # Start tool
+yuki-control stop tool_name      # Stop tool
+yuki-control restart tool_name   # Restart tool
+yuki-control list               # List all tools
+yuki-control status tool_name   # Show status
+```
+
+### Create Tool
+```python
+#!/usr/bin/env python3
+import sys
+print("EVENT|my_tool|data")  # Send event
+sys.stdout.flush()            # MUST flush!
+for line in sys.stdin:        # Receive events
+    process(line)
+```
+
+### Add Tool to Config
+```ini
+[tool:my_tool]
+command = python tools/my_tool.py
+autostart = no              # Manual start
+subscribe_to = EVENT_TYPE
+```
+
+**See `TOOL_DEVELOPMENT.md` for complete guide!**
