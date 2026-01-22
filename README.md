@@ -2,21 +2,23 @@
 
 **Event-driven tool orchestration framework with integrated control**
 
-## What's New in v2.0
+Yuki-Frame is a lightweight framework for orchestrating multiple tools through events and direct control. Tools communicate via stdin/stdout, and can manage each other using the integrated Control API.
 
-### 🎯 Integrated Control System
-- **No separate control executable needed** - Control is built into the framework
-- **Simple file-based commands** - Just write to `yuki-frame.cmd` file
-- **Cross-platform control scripts** - `yuki-control.sh` (Linux) / `yuki-control.bat` (Windows)
-- **Real-time tool status** - Accurate PID and status information
-- **No IPC complexity** - Simple, reliable file-based communication
+## What's New in v2.0 🎉
 
-### ✨ Core Features
-- Built-in tool lifecycle management (start/stop/restart)
-- Real-time tool status monitoring
-- Event tracing and debugging
-- Health checks and automatic restart
-- Better error handling and reporting
+### Integrated Control API
+- **Control is built into the framework** - no separate executable needed
+- **Any tool can manage other tools** - start, stop, restart, query status
+- **Interactive console mode** - type commands directly with `-i` flag
+- **Simpler architecture** - one executable, easier to understand
+
+### Key Features
+- ✅ Event-driven inter-tool communication
+- ✅ Integrated Control API for tool management
+- ✅ Interactive console for quick operations
+- ✅ Automatic tool restart on crash
+- ✅ Health monitoring and statistics
+- ✅ Cross-platform (Linux, Windows, macOS)
 
 ## Quick Start
 
@@ -24,15 +26,14 @@
 
 ```bash
 # Linux/macOS
-./build.sh
-
-# Windows
-build.bat
-
-# Or manually
 mkdir build && cd build
 cmake ..
 cmake --build .
+
+# Windows
+mkdir build && cd build
+cmake ..
+cmake --build . --config Release
 ```
 
 ### 2. Configure
@@ -43,111 +44,55 @@ Edit `yuki-frame.conf`:
 [core]
 log_file = logs/yuki-frame.log
 log_level = INFO
-enable_debug = yes
 
 [tool:monitor]
 command = python tools/monitor.py
-autostart = yes              # Starts automatically
+autostart = yes
 restart_on_crash = yes
 subscribe_to = ALERT
 
-[tool:backup]
-command = python tools/backup.py
-autostart = no               # Start manually when needed
-restart_on_crash = no
-subscribe_to = 
+[tool:alerter]
+command = python tools/alerter.py
+autostart = yes
+restart_on_crash = yes
+subscribe_to = ALERT,ERROR
 ```
 
-### 3. Run Framework
+### 3. Run
 
 ```bash
-# Linux/macOS
-./build/yuki-frame -c yuki-frame.conf
+# Basic mode
+./yuki-frame -c yuki-frame.conf
 
-# Windows
-build\Release\yuki-frame.exe -c yuki-frame.conf
+# Interactive console mode (recommended!)
+./yuki-frame -c yuki-frame.conf -i
 ```
 
-### 4. Control Tools
+### 4. Use Interactive Console
 
-In another terminal:
-
-```bash
-# Linux/macOS
-./yuki-control.sh list
-./yuki-control.sh start backup
-./yuki-control.sh status backup
-./yuki-control.sh stop backup
-
-# Windows
-yuki-control.bat list
-yuki-control.bat start backup
-yuki-control.bat status backup
-yuki-control.bat stop backup
 ```
-
-## How Control Works
-
-### File-Based Command System
-
-Yuki-Frame v2.0 uses a simple file-based control system:
-
-1. **Write command** → The control script writes to `yuki-frame.cmd`
-2. **Framework reads** → Main loop detects the command file
-3. **Execute command** → Framework performs the requested action
-4. **Write response** → Result is written to `yuki-frame.response`
-5. **Display result** → Control script shows the response
-
-### Available Commands
-
-```bash
-# List all tools with their current status
-yuki-control list
-
-# Start a tool
-yuki-control start <tool_name>
-
-# Stop a running tool
-yuki-control stop <tool_name>
-
-# Restart a tool
-yuki-control restart <tool_name>
-
-# Show detailed tool status
-yuki-control status <tool_name>
-
-# Shutdown the framework
-yuki-control shutdown
-```
-
-### Example Output
-
-```bash
-$ yuki-control list
-
+yuki> list
 Tools Status:
 Name                 Status     PID       
 ------------------------------------------------------------
 monitor              RUNNING    12345     
-sender               RUNNING    12346     
-backup               STOPPED    0         
+alerter              RUNNING    12346     
 
-$ yuki-control status monitor
+yuki> start backup
+Success: Tool 'backup' started
 
+yuki> status monitor
 Tool Status:
   Name: monitor
-  Command: python tools/monitor.py
-  Description: System resource monitor
   Status: RUNNING
   PID: 12345
-  Autostart: yes
-  Restart on crash: yes
-  Max restarts: 5
-  Restart count: 0
   Events sent: 42
-  Events received: 0
-  Subscriptions:
-    - ALERT
+
+yuki> help
+Available commands:
+  list, start <tool>, stop <tool>, status <tool>, ...
+
+yuki> quit
 ```
 
 ## Architecture
@@ -157,61 +102,28 @@ Tool Status:
 │         Yuki-Frame Process              │
 │                                         │
 │  ┌───────────────────────────────────┐ │
-│  │  Main Loop                        │ │
-│  │  • Process events                 │ │
-│  │  • Monitor tool output            │ │
-│  │  • Check health                   │ │
-│  │  • Check for commands ◄───────────┼─┼── yuki-frame.cmd
+│  │  Control API (Integrated!)        │ │
+│  │  • control_start_tool()           │ │
+│  │  • control_stop_tool()            │ │
+│  │  • control_list_tools()           │ │
 │  └───────────────────────────────────┘ │
-│                                         │
-│  ┌───────────────────────────────────┐ │
+│                 ▲                       │
+│                 │                       │
+│  ┌──────────────┴────────────────────┐ │
 │  │  Tool Manager                     │ │
-│  │  • test_echo      (PID: 12345)    │ │
-│  │  • test_status    (PID: 12346)    │ │
-│  │  • test_hello     (STOPPED)       │ │
+│  │  • monitor      (PID: 12345)      │ │
+│  │  • alerter      (PID: 12346)      │ │
+│  │  • backup       (STOPPED)         │ │
 │  └───────────────────────────────────┘ │
 │                                         │
 └─────────────────────────────────────────┘
-                    │
-                    └──────────────────────► yuki-frame.response
 ```
 
-## Configuration
-
-### Core Settings
-
-```ini
-[core]
-# Logging
-log_file = /var/log/yuki-frame/yuki-frame.log
-log_level = INFO        # TRACE, DEBUG, INFO, WARN, ERROR, FATAL
-
-# Process
-pid_file = /var/run/yuki-frame.pid
-max_tools = 100
-message_queue_size = 1000
-
-# Debug
-enable_debug = no       # Enable debug tracing
-enable_remote_control = no
-control_port = 9999
-```
-
-### Tool Configuration
-
-```ini
-[tool:my_tool]
-command = /path/to/tool
-description = Tool description
-autostart = yes         # Start automatically (yes/no)
-restart_on_crash = yes  # Auto-restart on crash (yes/no)
-max_restarts = 3       # Max restart attempts (0 = unlimited)
-subscribe_to = EVENT1,EVENT2  # Event subscriptions
-```
+**Any tool can use the Control API** to manage other tools!
 
 ## Tool Development
 
-Tools communicate via standard I/O:
+Tools communicate via stdin/stdout:
 
 ```python
 #!/usr/bin/env python3
@@ -226,12 +138,12 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGTERM, signal_handler)
 
-# Log to stderr (captured by framework)
+# Log to stderr
 print("[INFO] Tool started", file=sys.stderr)
 
-# Emit events to stdout
+# Send events to stdout
 print("STATUS|my_tool|System OK")
-sys.stdout.flush()  # CRITICAL: Must flush!
+sys.stdout.flush()  # CRITICAL!
 
 # Read events from stdin
 for line in sys.stdin:
@@ -239,21 +151,94 @@ for line in sys.stdin:
         break
     
     event_type, sender, data = line.strip().split('|', 2)
-    # Process event
     print(f"[INFO] Received {event_type}", file=sys.stderr)
 
 print("[INFO] Tool stopped", file=sys.stderr)
 ```
 
-**Complete guide**: See `TOOL_DEVELOPMENT.md`
+**C/C++ tools can use the Control API:**
+
+```c
+#include "yuki_frame/control_api.h"
+
+// Start another tool
+control_start_tool("backup");
+
+// Get tool status
+ControlToolInfo info;
+control_get_tool_status("monitor", &info);
+printf("Monitor PID: %u\n", info.pid);
+
+// List all tools
+control_list_tools(my_callback, NULL);
+```
+
+## Use Cases
+
+### Always-On Monitoring
+```ini
+[tool:monitor]
+autostart = yes
+restart_on_crash = yes
+max_restarts = 10
+```
+
+### On-Demand Tools
+```ini
+[tool:backup]
+autostart = no          # Start manually when needed
+```
+
+```bash
+# In console:
+yuki> start backup
+# ... backup runs ...
+yuki> stop backup
+```
+
+### Event-Driven Workflows
+```ini
+[tool:watcher]
+autostart = yes
+# Publishes FILE_CHANGED events
+
+[tool:processor]
+autostart = yes
+subscribe_to = FILE_CHANGED  # Processes files when changed
+
+[tool:notifier]
+autostart = yes
+subscribe_to = FILE_PROCESSED  # Sends notifications
+```
+
+### Tool Orchestration (NEW!)
+```c
+// Watchdog tool using Control API
+#include "yuki_frame/control_api.h"
+
+bool check_tool(const ControlToolInfo* info, void* data) {
+    if (info->status == TOOL_CRASHED) {
+        control_restart_tool(info->name);
+    }
+    return true;
+}
+
+int main() {
+    while (1) {
+        control_list_tools(check_tool, NULL);
+        sleep(10);
+    }
+}
+```
 
 ## Command Line Options
-
-### Framework
 
 ```bash
 # Start framework
 yuki-frame -c config.conf
+
+# With interactive console
+yuki-frame -c config.conf -i
 
 # With debug mode
 yuki-frame -c config.conf -d
@@ -265,198 +250,103 @@ yuki-frame -v
 yuki-frame -h
 ```
 
-### Control Script
+## Documentation
 
-```bash
-# List all tools
-yuki-control list
-
-# Control specific tool
-yuki-control start tool_name
-yuki-control stop tool_name
-yuki-control restart tool_name
-
-# Get detailed status
-yuki-control status tool_name
-
-# Shutdown framework
-yuki-control shutdown
-
-# Help
-yuki-control help
-```
-
-## Use Cases
-
-### On-Demand Tools
-
-Start tools only when needed:
-
-```ini
-[tool:backup]
-command = python tools/backup.py
-autostart = no          # Don't start automatically
-```
-
-```bash
-# Run backup when needed
-yuki-control start backup
-# ... backup runs ...
-yuki-control stop backup
-```
-
-### Always-Running Tools
-
-Tools that should always be active:
-
-```ini
-[tool:monitor]
-command = python tools/monitor.py
-autostart = yes         # Start with framework
-restart_on_crash = yes  # Restart if crashes
-max_restarts = 10      # Up to 10 restart attempts
-```
-
-### Event-Driven Workflows
-
-Tools communicate via events:
-
-```ini
-[tool:watcher]
-command = python tools/file_watcher.py
-autostart = yes
-subscribe_to =          # Publishes FILE_CHANGED events
-
-[tool:processor]
-command = python tools/process_file.py
-autostart = yes
-subscribe_to = FILE_CHANGED  # Processes files when changed
-
-[tool:notifier]
-command = python tools/notifier.py
-autostart = yes
-subscribe_to = FILE_PROCESSED  # Sends notifications
-```
-
-## Troubleshooting
-
-### Tools not starting
-
-**Check logs:**
-```bash
-tail -f logs/yuki-frame.log
-```
-
-**Common issues:**
-- Python not in PATH → Use full path: `C:\Python39\python.exe tools\tool.py`
-- Tool file not found → Use absolute paths in config
-- Permission denied → `chmod +x tools/tool.py` (Linux)
-
-### Control commands timeout
-
-```bash
-# Check if framework is running
-ps aux | grep yuki-frame    # Linux
-tasklist | findstr yuki     # Windows
-
-# Check for command file issues
-ls -la yuki-frame.cmd       # Should not exist when idle
-ls -la yuki-frame.response  # Should appear briefly during commands
-```
-
-### Events not routing
-
-1. Check subscription: `subscribe_to = EVENT_TYPE`
-2. Check event format: `TYPE|sender|data`
-3. Enable debug: `./yuki-frame -d`
-4. Check logs for event routing
+| Document | Description |
+|----------|-------------|
+| **README.md** | This file - quick start and overview |
+| **[docs/CONTROL_API.md](docs/CONTROL_API.md)** | Complete Control API reference |
+| **[docs/TOOL_DEVELOPMENT.md](docs/TOOL_DEVELOPMENT.md)** | Guide to writing tools |
+| **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** | Framework development guide |
+| **[docs/TESTING.md](docs/TESTING.md)** | Testing and debugging |
+| **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Version history and migration guide |
+| **LICENSE** | MIT License |
 
 ## Platform Support
 
 - ✅ **Linux** (tested on Ubuntu 20.04+)
 - ✅ **Windows** (tested on Windows 10/11)
-- ✅ **macOS** (should work, tested on macOS 12+)
-- ✅ **BSD** (should work)
+- ✅ **macOS** (tested on macOS 12+)
+- ⚠️  Console mode: Unix/Linux only (uses pthread)
 
-## Documentation
+## Examples
 
-| Document | Description |
-|----------|-------------|
-| `README.md` | This file (overview and quick start) |
-| `TOOL_DEVELOPMENT.md` | **Complete guide to writing tools** |
-| `DEVELOPMENT.md` | Framework development guide |
-| `TESTING.md` | Testing and debugging guide |
-| `CHANGELOG.md` | Version history |
-| `LICENSE` | MIT License |
+See `tools/` directory for example tools:
+- `monitor.py` - System resource monitoring
+- `alerter.py` - Alert processing
+- `echo.py` - Simple echo tool
+- `sender.py` / `receiver.py` - Message passing example
 
-## Building
+## Migration from v1.0
 
-### Linux/macOS
+**What changed:**
+- Control is now integrated (no separate `yuki-control` executable)
+- Interactive console mode available with `-i` flag
+- C/C++ tools can use Control API directly
+- Simpler configuration (no control module needed)
 
+**Old way (v1.0):**
 ```bash
-./build.sh              # Release build
-./build.sh Debug        # Debug build
-
-# Or manually
-mkdir build && cd build
-cmake ..
-cmake --build .
-sudo cmake --install .
+./yuki-control start my_tool
 ```
 
-### Windows
-
+**New way (v2.0):**
 ```bash
-build.bat              # Release build
-build.bat Debug        # Debug build
-
-# Or manually
-mkdir build && cd build
-cmake .. -G "Visual Studio 17 2022"
-cmake --build . --config Release
+./yuki-frame -c config.conf -i
+yuki> start my_tool
 ```
 
-## Installation
-
-### From Source
-
-```bash
-mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
-cmake --build .
-sudo cmake --install .
+Or from C/C++ tools:
+```c
+control_start_tool("my_tool");
 ```
 
-Installs:
-- `/usr/local/bin/yuki-frame` - Main executable
-- `/usr/local/bin/yuki-control` - Control script
-- `/usr/local/include/yuki_frame/` - Headers
-- `/etc/yuki-frame/yuki-frame.conf.example` - Example config
+See `docs/CHANGELOG.md` for complete migration guide.
 
-## License
+## Troubleshooting
 
-MIT License - See `LICENSE` file for details.
+### Tools not starting?
+```bash
+# Check logs
+tail -f logs/yuki-frame.log
+
+# Enable debug mode
+./yuki-frame -c config.conf -d
+```
+
+### Can't control tools?
+```bash
+# Use interactive console
+./yuki-frame -c config.conf -i
+yuki> list
+yuki> start my_tool
+```
+
+### Events not routing?
+1. Check `subscribe_to` in config
+2. Verify event format: `TYPE|sender|data`
+3. Make sure to flush stdout after printing events
+4. Check logs for routing information
+
+See `docs/TESTING.md` for complete debugging guide.
 
 ## Contributing
 
-We welcome contributions! See `DEVELOPMENT.md` for:
+We welcome contributions! See `docs/DEVELOPMENT.md` for:
 - Development setup
 - Coding standards
 - Testing requirements
 - Pull request process
 
-## Support
+## License
 
-- **Documentation**: See markdown files in project root
-- **Examples**: See `examples/` and `tools/` directories
-- **Issues**: Report bugs via GitHub issues
-- **Questions**: Open a discussion on GitHub
+MIT License - See `LICENSE` file for details.
 
 ## Version
 
 Current version: **2.0.0** (Released January 2026)
 
-See `CHANGELOG.md` for complete version history.
+See `docs/CHANGELOG.md` for complete version history.
 
 ---
 
@@ -464,35 +354,47 @@ See `CHANGELOG.md` for complete version history.
 
 ### Start Framework
 ```bash
-yuki-frame -c yuki-frame.conf
+./yuki-frame -c yuki-frame.conf -i
 ```
 
-### Control Tools
-```bash
-yuki-control list               # List all tools
-yuki-control start tool_name    # Start tool
-yuki-control stop tool_name     # Stop tool
-yuki-control restart tool_name  # Restart tool
-yuki-control status tool_name   # Show status
-yuki-control shutdown           # Shutdown framework
+### Console Commands
+```
+list                    # List all tools
+start <tool>            # Start a tool
+stop <tool>             # Stop a tool
+restart <tool>          # Restart a tool
+status <tool>           # Show detailed status
+shutdown                # Shutdown framework
+help                    # Show help
+quit                    # Exit console (framework continues)
 ```
 
-### Create Tool
+### Create a Tool
 ```python
 #!/usr/bin/env python3
 import sys
-print("EVENT|my_tool|data")  # Send event
-sys.stdout.flush()            # MUST flush!
-for line in sys.stdin:        # Receive events
-    process(line)
+import signal
+
+running = True
+signal.signal(signal.SIGTERM, lambda s,f: globals().__setitem__('running', False))
+
+print("[INFO] Started", file=sys.stderr)
+
+for line in sys.stdin:
+    if not running: break
+    print("RESPONSE|tool|OK")
+    sys.stdout.flush()
+
+print("[INFO] Stopped", file=sys.stderr)
 ```
 
-### Add Tool to Config
+### Add to Config
 ```ini
 [tool:my_tool]
-command = python tools/my_tool.py
-autostart = no              # Manual start via yuki-control
+command = /path/to/my_tool.py
+autostart = yes
+restart_on_crash = yes
 subscribe_to = EVENT_TYPE
 ```
 
-**See `TOOL_DEVELOPMENT.md` for complete guide!**
+**See `docs/TOOL_DEVELOPMENT.md` for complete guide!**

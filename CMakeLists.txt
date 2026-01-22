@@ -87,9 +87,11 @@ install(DIRECTORY include/yuki_frame
 if(WIN32)
     set(CONFIG_DIR "C:/ProgramData/yuki-frame")
     set(LOG_DIR "C:/ProgramData/yuki-frame/logs")
+    set(DOC_DIR "${CMAKE_INSTALL_PREFIX}/share/doc/yuki-frame")
 else()
     set(CONFIG_DIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}/yuki-frame")
     set(LOG_DIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/log/yuki-frame")
+    set(DOC_DIR "${CMAKE_INSTALL_FULL_DOCDIR}")
 endif()
 
 install(DIRECTORY DESTINATION ${CONFIG_DIR})
@@ -100,12 +102,24 @@ install(FILES yuki-frame.conf.example
     RENAME yuki-frame.conf.example
 )
 
-install(FILES
-    README.md
-    TOOL_DEVELOPMENT.md
-    DEVELOPMENT.md
-    CHANGELOG.md
-    DESTINATION ${CMAKE_INSTALL_DOCDIR}
+# Install documentation
+install(FILES README.md LICENSE
+    DESTINATION ${DOC_DIR}
+)
+
+install(DIRECTORY docs/
+    DESTINATION ${DOC_DIR}
+    FILES_MATCHING PATTERN "*.md"
+)
+
+install(DIRECTORY tools/
+    DESTINATION ${DOC_DIR}/examples/tools
+    FILES_MATCHING PATTERN "*.py"
+)
+
+install(DIRECTORY examples/
+    DESTINATION ${DOC_DIR}/examples
+    FILES_MATCHING PATTERN "*"
 )
 
 # Testing

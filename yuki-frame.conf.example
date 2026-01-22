@@ -1,5 +1,5 @@
 # Yuki-Frame v2.0 Configuration
-# Event-driven tool orchestration framework
+# Event-driven tool orchestration framework with integrated control
 
 [core]
 # Logging configuration
@@ -11,10 +11,8 @@ pid_file = yuki-frame.pid
 max_tools = 100
 message_queue_size = 1000
 
-# Debug and control (NEW in v2.0)
+# Debug mode (NEW in v2.0)
 enable_debug = no         # Enable debug tracing
-enable_remote_control = no  # Enable remote control API
-control_port = 9999       # Port for remote control (if enabled)
 
 # ============================================
 # Example Tools
@@ -29,14 +27,13 @@ restart_on_crash = yes
 max_restarts = 5
 subscribe_to = ALERT
 
-# Logger Tool
-[tool:logger]
-command = python tools/logger.py
-description = Event logger
-autostart = yes
-restart_on_crash = yes
-max_restarts = 3
-subscribe_to = 
+# Echo Tool (for testing)
+[tool:echo]
+command = python tools/echo.py
+description = Echo received events
+autostart = no           # Start manually when needed
+restart_on_crash = no
+subscribe_to = TEST
 
 # Alert Handler
 [tool:alerter]
@@ -47,13 +44,29 @@ restart_on_crash = yes
 max_restarts = 3
 subscribe_to = ALERT,ERROR,WARNING
 
+# Message Sender (example)
+[tool:sender]
+command = python tools/sender.py
+description = Sends periodic messages
+autostart = no           # Start manually
+restart_on_crash = no
+subscribe_to = 
+
+# Message Receiver (example)
+[tool:receiver]
+command = python tools/receiver.py
+description = Receives and displays messages
+autostart = no           # Start manually
+restart_on_crash = no
+subscribe_to = MESSAGE,ACK
+
 # ============================================
 # Your Custom Tools
 # ============================================
 
 # Example: Email Watcher
 # [tool:email_watcher]
-# command = python /path/to/email_watcher.py
+# command = /usr/local/bin/python3 /path/to/email_watcher.py
 # description = Monitors email inbox
 # autostart = yes
 # restart_on_crash = yes
@@ -62,7 +75,7 @@ subscribe_to = ALERT,ERROR,WARNING
 
 # Example: Calendar Manager
 # [tool:calendar]
-# command = python /path/to/calendar.py
+# command = /usr/local/bin/python3 /path/to/calendar.py
 # description = Calendar event manager
 # autostart = yes
 # restart_on_crash = yes
@@ -75,6 +88,14 @@ subscribe_to = ALERT,ERROR,WARNING
 # description = Backup utility
 # autostart = no          # Don't start automatically
 # restart_on_crash = no
+# subscribe_to = 
+
+# Example: Watchdog Tool (using Control API)
+# [tool:watchdog]
+# command = /path/to/watchdog
+# description = Monitors and restarts crashed tools
+# autostart = yes
+# restart_on_crash = yes
 # subscribe_to = 
 
 # ============================================
@@ -106,7 +127,15 @@ subscribe_to = ALERT,ERROR,WARNING
 #   ERROR - Errors only
 #   FATAL - Fatal errors only
 
-# v2.0 Changes:
-#   - Control and debug are now built-in (no separate tools needed)
-#   - No need for control module or config sender
-#   - Simplified configuration
+# v2.0 New Features:
+#   - Integrated Control API - any tool can manage other tools
+#   - Interactive console mode (start with -i flag)
+#   - No separate control executable needed
+#   - Tools can use control_start_tool(), control_stop_tool(), etc.
+#   - See docs/CONTROL_API.md for complete reference
+
+# Quick Start:
+#   1. Edit this file to add your tools
+#   2. Run: ./yuki-frame -c yuki-frame.conf
+#   3. Or with console: ./yuki-frame -c yuki-frame.conf -i
+#   4. In console: type 'list', 'start tool_name', 'help', etc.
