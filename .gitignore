@@ -41,7 +41,6 @@ logs/
 *.tgz
 
 # Debug
-core
 core.*
 vgcore.*
 *.dSYM/
