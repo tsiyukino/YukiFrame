@@ -12,19 +12,21 @@
 #include "yuki_frame/tool.h"
 #include "yuki_frame/event.h"
 #include "yuki_frame/platform.h"
+#include "yuki_frame/control_api.h"
+#include "yuki_frame/console.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <ctype.h>
 
-// Command file for external control
-#define COMMAND_FILE "yuki-frame.cmd"
-#define RESPONSE_FILE "yuki-frame.response"
+// Declare control_api_init (internal function)
+void control_api_init(void);
 
 // Global state
 FrameworkConfig g_config;
 bool g_running = true;
+bool g_enable_console = false;  // Global console enable flag
 
 // Signal handler
 void signal_handler(int sig) {
@@ -53,17 +55,15 @@ void print_usage(const char* prog_name) {
     printf("  -h, --help          Show this help message\n");
     printf("  -v, --version       Show version information\n");
     printf("  -d, --debug         Enable debug mode\n");
+    printf("  -i, --interactive   Enable interactive console\n");
     printf("\n");
-    printf("Control Commands (via file):\n");
-    printf("  Write commands to '%s' file:\n", COMMAND_FILE);
-    printf("    start <tool>     - Start a tool\n");
-    printf("    stop <tool>      - Stop a tool\n");
-    printf("    restart <tool>   - Restart a tool\n");
-    printf("    list             - List all tools\n");
-    printf("    status <tool>    - Show tool status\n");
-    printf("    shutdown         - Shutdown framework\n");
+    printf("Interactive Console:\n");
+    printf("  When enabled, you can type commands directly:\n");
+    printf("    list, start <tool>, stop <tool>, status <tool>, etc.\n");
     printf("\n");
-    printf("  Response will be written to '%s'\n", RESPONSE_FILE);
+    printf("Examples:\n");
+    printf("  %s -c yuki-frame.conf\n", prog_name);
+    printf("  %s -c yuki-frame.conf -i     # With interactive console\n", prog_name);
     printf("\n");
 }
 
@@ -121,6 +121,19 @@ int framework_init(const char* config_file) {
         LOG_INFO("main", "Debug mode enabled");
     }
     
+    // Initialize control API
+    control_api_init();
+    LOG_INFO("main", "Control API initialized");
+    
+    // Initialize console if enabled
+    if (g_enable_console) {
+        ret = console_init();
+        if (ret != FW_OK) {
+            LOG_ERROR("main", "Failed to initialize console");
+            return ret;
+        }
+    }
+    
     // Load and register tools from configuration
     ToolConfig* tools;
     int tool_count;
@@ -160,194 +173,24 @@ int framework_init(const char* config_file) {
     }
     
     LOG_INFO("main", "Framework initialized successfully");
-    LOG_INFO("main", "Control enabled: Write commands to '%s'", COMMAND_FILE);
+    if (g_enable_console) {
+        LOG_INFO("main", "Interactive console available (will start after main loop begins)");
+    }
     return FW_OK;
-}
-
-// Process command file
-void process_command_file(void) {
-    FILE* cmd_file = fopen(COMMAND_FILE, "r");
-    if (!cmd_file) {
-        return; // No command file present
-    }
-    
-    char line[1024];
-    if (!fgets(line, sizeof(line), cmd_file)) {
-        fclose(cmd_file);
-        return;
-    }
-    fclose(cmd_file);
-    
-    // Parse command
-    char cmd[256], arg[256];
-    arg[0] = '\0';
-    int parsed = sscanf(line, "%255s %255s", cmd, arg);
-    
-    if (parsed < 1) {
-        remove(COMMAND_FILE);
-        return;
-    }
-    
-    // Convert command to lowercase
-    for (char* p = cmd; *p; p++) {
-        *p = tolower(*p);
-    }
-    
-    LOG_INFO("main", "Processing command: %s %s", cmd, arg);
-    
-    // Open response file
-    FILE* resp_file = fopen(RESPONSE_FILE, "w");
-    if (!resp_file) {
-        LOG_ERROR("main", "Failed to create response file");
-        remove(COMMAND_FILE);
-        return;
-    }
-    
-    // Execute command
-    if (strcmp(cmd, "list") == 0) {
-        fprintf(resp_file, "\nTools Status:\n");
-        fprintf(resp_file, "%-20s %-10s %-10s\n", "Name", "Status", "PID");
-        fprintf(resp_file, "------------------------------------------------------------\n");
-        
-        Tool* tool = tool_get_first();
-        int count = 0;
-        while (tool) {
-            const char* status_str;
-            switch (tool->status) {
-                case TOOL_STOPPED: status_str = "STOPPED"; break;
-                case TOOL_RUNNING: status_str = "RUNNING"; break;
-                case TOOL_CRASHED: status_str = "CRASHED"; break;
-                case TOOL_ERROR:   status_str = "ERROR";   break;
-                default:           status_str = "UNKNOWN"; break;
-            }
-            
-            fprintf(resp_file, "%-20s %-10s %-10d\n", tool->name, status_str, (int)tool->pid);
-            tool = tool_get_next();
-            count++;
-        }
-        
-        if (count == 0) {
-            fprintf(resp_file, "(No tools registered)\n");
-        }
-        fprintf(resp_file, "\n");
-    }
-    else if (strcmp(cmd, "start") == 0) {
-        if (strlen(arg) == 0) {
-            fprintf(resp_file, "Error: 'start' command requires a tool name\n");
-        } else {
-            int result = tool_start(arg);
-            if (result == FW_OK) {
-                Tool* tool = tool_find(arg);
-                fprintf(resp_file, "Success: Tool '%s' started\n", arg);
-                if (tool) {
-                    fprintf(resp_file, "  PID: %d\n", (int)tool->pid);
-                    fprintf(resp_file, "  Status: RUNNING\n");
-                }
-            } else if (result == FW_ERROR_NOT_FOUND) {
-                fprintf(resp_file, "Error: Tool '%s' not found in configuration\n", arg);
-            } else {
-                fprintf(resp_file, "Error: Failed to start tool '%s' (error code: %d)\n", arg, result);
-            }
-        }
-    }
-    else if (strcmp(cmd, "stop") == 0) {
-        if (strlen(arg) == 0) {
-            fprintf(resp_file, "Error: 'stop' command requires a tool name\n");
-        } else {
-            int result = tool_stop(arg);
-            if (result == FW_OK) {
-                fprintf(resp_file, "Success: Tool '%s' stopped\n", arg);
-            } else if (result == FW_ERROR_NOT_FOUND) {
-                fprintf(resp_file, "Error: Tool '%s' not found\n", arg);
-            } else {
-                fprintf(resp_file, "Error: Failed to stop tool '%s'\n", arg);
-            }
-        }
-    }
-    else if (strcmp(cmd, "restart") == 0) {
-        if (strlen(arg) == 0) {
-            fprintf(resp_file, "Error: 'restart' command requires a tool name\n");
-        } else {
-            int result = tool_restart(arg);
-            if (result == FW_OK) {
-                Tool* tool = tool_find(arg);
-                fprintf(resp_file, "Success: Tool '%s' restarted\n", arg);
-                if (tool) {
-                    fprintf(resp_file, "  PID: %d\n", (int)tool->pid);
-                    fprintf(resp_file, "  Status: RUNNING\n");
-                }
-            } else if (result == FW_ERROR_NOT_FOUND) {
-                fprintf(resp_file, "Error: Tool '%s' not found\n", arg);
-            } else {
-                fprintf(resp_file, "Error: Failed to restart tool '%s'\n", arg);
-            }
-        }
-    }
-    else if (strcmp(cmd, "status") == 0) {
-        if (strlen(arg) == 0) {
-            fprintf(resp_file, "Error: 'status' command requires a tool name\n");
-        } else {
-            Tool* tool = tool_find(arg);
-            if (!tool) {
-                fprintf(resp_file, "Error: Tool '%s' not found\n", arg);
-            } else {
-                fprintf(resp_file, "\nTool Status:\n");
-                fprintf(resp_file, "  Name: %s\n", tool->name);
-                fprintf(resp_file, "  Command: %s\n", tool->command);
-                if (strlen(tool->description) > 0) {
-                    fprintf(resp_file, "  Description: %s\n", tool->description);
-                }
-                fprintf(resp_file, "  Status: %s\n",
-                       tool->status == TOOL_RUNNING ? "RUNNING" :
-                       tool->status == TOOL_STOPPED ? "STOPPED" :
-                       tool->status == TOOL_CRASHED ? "CRASHED" : "UNKNOWN");
-                fprintf(resp_file, "  PID: %d\n", (int)tool->pid);
-                fprintf(resp_file, "  Autostart: %s\n", tool->autostart ? "yes" : "no");
-                fprintf(resp_file, "  Restart on crash: %s\n", tool->restart_on_crash ? "yes" : "no");
-                fprintf(resp_file, "  Max restarts: %d\n", tool->max_restarts);
-                fprintf(resp_file, "  Restart count: %d\n", tool->restart_count);
-                fprintf(resp_file, "  Events sent: %lu\n", tool->events_sent);
-                fprintf(resp_file, "  Events received: %lu\n", tool->events_received);
-                
-                if (tool->subscription_count > 0) {
-                    fprintf(resp_file, "  Subscriptions:\n");
-                    for (int i = 0; i < tool->subscription_count; i++) {
-                        fprintf(resp_file, "    - %s\n", tool->subscriptions[i]);
-                    }
-                }
-                fprintf(resp_file, "\n");
-            }
-        }
-    }
-    else if (strcmp(cmd, "shutdown") == 0) {
-        fprintf(resp_file, "Shutting down framework...\n");
-        g_running = false;
-    }
-    else {
-        fprintf(resp_file, "Error: Unknown command '%s'\n", cmd);
-        fprintf(resp_file, "\nAvailable commands:\n");
-        fprintf(resp_file, "  list\n");
-        fprintf(resp_file, "  start <tool>\n");
-        fprintf(resp_file, "  stop <tool>\n");
-        fprintf(resp_file, "  restart <tool>\n");
-        fprintf(resp_file, "  status <tool>\n");
-        fprintf(resp_file, "  shutdown\n");
-    }
-    
-    fclose(resp_file);
-    remove(COMMAND_FILE);
 }
 
 // Main loop
 void framework_run(void) {
     LOG_INFO("main", "Entering main loop");
     
+    // Start console if enabled
+    if (g_enable_console) {
+        console_start();
+    }
+    
     char buffer[4096];
     
     while (g_running) {
-        // Check for external commands
-        process_command_file();
-        
         // Process events
         event_process_queue();
         
@@ -395,6 +238,11 @@ void framework_run(void) {
 void framework_shutdown(void) {
     LOG_INFO("main", "Shutting down framework");
     
+    // Shutdown console
+    if (g_enable_console) {
+        console_shutdown();
+    }
+    
     // Stop all tools
     Tool* tool = tool_get_first();
     while (tool) {
@@ -414,10 +262,6 @@ void framework_shutdown(void) {
     platform_shutdown();
     logger_shutdown();
     
-    // Cleanup command files
-    remove(COMMAND_FILE);
-    remove(RESPONSE_FILE);
-    
     printf("%s shutdown complete\n", YUKI_FRAME_NAME);
 }
 
@@ -430,6 +274,7 @@ const char* framework_version(void) {
 int main(int argc, char** argv) {
     const char* config_file = "yuki-frame.conf";
     bool debug_mode = false;
+    bool interactive_mode = false;
     
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
@@ -452,6 +297,9 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
             debug_mode = true;
         }
+        else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--interactive") == 0) {
+            interactive_mode = true;
+        }
     }
     
     // Setup signal handlers
@@ -472,6 +320,11 @@ int main(int argc, char** argv) {
         g_config.enable_debug = true;
         logger_set_level(LOG_DEBUG);
         debug_init();
+    }
+    
+    // Override console if command line flag set
+    if (interactive_mode) {
+        g_enable_console = true;
     }
     
     // Run main loop

@@ -47,6 +47,8 @@ set(FRAMEWORK_LIB_SOURCES
     src/core/config.c
     src/core/control.c
     src/core/debug.c
+    src/core/control_api.c
+    src/core/console.c
 )
 
 # Platform-specific sources
@@ -67,7 +69,7 @@ if(WIN32)
     target_link_libraries(yuki-frame PRIVATE ws2_32)
 else()
     find_package(Threads REQUIRED)
-    target_link_libraries(yuki-frame PRIVATE Threads::Threads rt)
+    target_link_libraries(yuki-frame PRIVATE Threads::Threads rt pthread)
 endif()
 
 # Installation
@@ -82,20 +84,10 @@ install(DIRECTORY include/yuki_frame
     FILES_MATCHING PATTERN "*.h"
 )
 
-# Install control scripts
 if(WIN32)
-    install(FILES yuki-control.bat
-        DESTINATION ${CMAKE_INSTALL_BINDIR}
-        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-    )
     set(CONFIG_DIR "C:/ProgramData/yuki-frame")
     set(LOG_DIR "C:/ProgramData/yuki-frame/logs")
 else()
-    install(FILES yuki-control.sh
-        DESTINATION ${CMAKE_INSTALL_BINDIR}
-        RENAME yuki-control
-        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-    )
     set(CONFIG_DIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}/yuki-frame")
     set(LOG_DIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/log/yuki-frame")
 endif()
@@ -149,11 +141,7 @@ message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "  C Standard:     ${CMAKE_C_STANDARD}")
 message(STATUS "========================================")
 message(STATUS "  Main executable: yuki-frame")
-message(STATUS "  Control method:  File-based (integrated)")
-if(WIN32)
-message(STATUS "  Control script:  yuki-control.bat")
-else()
-message(STATUS "  Control script:  yuki-control.sh")
-endif()
+message(STATUS "  Control API:     Integrated (control_api.c)")
+message(STATUS "  Console:         Optional interactive mode (-i flag)")
 message(STATUS "========================================")
 message(STATUS "")
