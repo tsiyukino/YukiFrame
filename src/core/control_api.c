@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <ctype.h>
+#include <inttypes.h>
 
 // Framework start time (set during initialization)
 static time_t g_framework_start_time = 0;
@@ -293,10 +294,11 @@ int control_execute_command(const char* command, char* response, size_t response
                          "  Autostart: %s\n", info.autostart ? "yes" : "no");
         offset += snprintf(response + offset, response_size - offset,
                          "  Restart on crash: %s\n", info.restart_on_crash ? "yes" : "no");
+        // FIXED: Use PRIu64 for uint64_t
         offset += snprintf(response + offset, response_size - offset,
-                         "  Events sent: %lu\n", info.events_sent);
+                         "  Events sent: %" PRIu64 "\n", info.events_sent);
         offset += snprintf(response + offset, response_size - offset,
-                         "  Events received: %lu\n", info.events_received);
+                         "  Events received: %" PRIu64 "\n", info.events_received);
         snprintf(response + offset, response_size - offset, "\n");
         return FW_OK;
     }
@@ -310,8 +312,8 @@ int control_execute_command(const char* command, char* response, size_t response
         uint64_t minutes = (uptime % 3600) / 60;
         uint64_t seconds = uptime % 60;
         snprintf(response, response_size,
-                "Framework uptime: %luh %lum %lus\n",
-                (unsigned long)hours, (unsigned long)minutes, (unsigned long)seconds);
+                "Framework uptime: %" PRIu64 "h %" PRIu64 "m %" PRIu64 "s\n",
+                hours, minutes, seconds);
         return FW_OK;
     }
     else if (strcmp(cmd, "version") == 0) {

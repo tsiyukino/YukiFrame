@@ -117,15 +117,10 @@ typedef struct {
     char data[MAX_EVENT_DATA];
 } ControlResponse;
 
-// Control API (integrated into core)
+// Legacy Control API (for internal use only - use control_api.h for tools)
 int control_init(void);
 void control_shutdown(void);
 int control_process_command(const ControlRequest* request, ControlResponse* response);
-int control_start_tool(const char* tool_name);
-int control_stop_tool(const char* tool_name);
-int control_restart_tool(const char* tool_name);
-int control_list_tools(char* buffer, size_t buffer_size);
-int control_get_status(const char* tool_name, char* buffer, size_t buffer_size);
 
 // Debug API (integrated into core)
 typedef enum {
