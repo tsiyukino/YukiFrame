@@ -39,7 +39,7 @@ endif()
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
-# Core source files (shared between executables)
+# Core source files
 set(FRAMEWORK_LIB_SOURCES
     src/core/logger.c
     src/core/event.c
@@ -56,13 +56,13 @@ else()
     list(APPEND FRAMEWORK_LIB_SOURCES src/platform/platform_linux.c)
 endif()
 
-# Main executable
+# Main executable (with integrated control)
 add_executable(yuki-frame 
     src/core/main.c
     ${FRAMEWORK_LIB_SOURCES}
 )
 
-# Platform-specific linking for main executable
+# Platform-specific linking
 if(WIN32)
     target_link_libraries(yuki-frame PRIVATE ws2_32)
 else()
@@ -70,24 +70,10 @@ else()
     target_link_libraries(yuki-frame PRIVATE Threads::Threads rt)
 endif()
 
-# Control utility executable
-add_executable(yuki-control 
-    src/core/cli_control.c
-    ${FRAMEWORK_LIB_SOURCES}
-)
-
-# Platform-specific linking for control utility
-if(WIN32)
-    target_link_libraries(yuki-control PRIVATE ws2_32)
-else()
-    find_package(Threads REQUIRED)
-    target_link_libraries(yuki-control PRIVATE Threads::Threads rt)
-endif()
-
 # Installation
 include(GNUInstallDirs)
 
-install(TARGETS yuki-frame yuki-control
+install(TARGETS yuki-frame
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
@@ -96,10 +82,20 @@ install(DIRECTORY include/yuki_frame
     FILES_MATCHING PATTERN "*.h"
 )
 
+# Install control scripts
 if(WIN32)
+    install(FILES yuki-control.bat
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+    )
     set(CONFIG_DIR "C:/ProgramData/yuki-frame")
     set(LOG_DIR "C:/ProgramData/yuki-frame/logs")
 else()
+    install(FILES yuki-control.sh
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        RENAME yuki-control
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+    )
     set(CONFIG_DIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}/yuki-frame")
     set(LOG_DIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/log/yuki-frame")
 endif()
@@ -152,8 +148,12 @@ message(STATUS "  C Compiler:     ${CMAKE_C_COMPILER_ID}")
 message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "  C Standard:     ${CMAKE_C_STANDARD}")
 message(STATUS "========================================")
-message(STATUS "  Executables:")
-message(STATUS "    - yuki-frame (main framework)")
-message(STATUS "    - yuki-control (control utility)")
+message(STATUS "  Main executable: yuki-frame")
+message(STATUS "  Control method:  File-based (integrated)")
+if(WIN32)
+message(STATUS "  Control script:  yuki-control.bat")
+else()
+message(STATUS "  Control script:  yuki-control.sh")
+endif()
 message(STATUS "========================================")
 message(STATUS "")
