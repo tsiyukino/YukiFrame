@@ -1,5 +1,5 @@
 # Yuki-Frame v2.0 Configuration
-# Event-driven tool orchestration framework with integrated control
+# Event-driven tool orchestration framework
 
 [core]
 # Logging configuration
@@ -11,8 +11,23 @@ pid_file = yuki-frame.pid
 max_tools = 100
 message_queue_size = 1000
 
-# Debug mode (NEW in v2.0)
+# Debug mode
 enable_debug = no         # Enable debug tracing
+
+# ============================================
+# Interactive Console (NEW!)
+# ============================================
+# Console is now a regular tool!
+# It uses stdin/stdout just like other tools
+# Start it with autostart=yes for immediate console
+
+[tool:console]
+command = python yuki-console.py
+description = Interactive console for framework control
+autostart = yes           # Start console automatically
+restart_on_crash = yes
+max_restarts = 3
+subscribe_to =            # Console doesn't need event subscriptions
 
 # ============================================
 # Example Tools
@@ -61,46 +76,14 @@ restart_on_crash = no
 subscribe_to = MESSAGE,ACK
 
 # ============================================
-# Your Custom Tools
-# ============================================
-
-# Example: Email Watcher
-# [tool:email_watcher]
-# command = /usr/local/bin/python3 /path/to/email_watcher.py
-# description = Monitors email inbox
-# autostart = yes
-# restart_on_crash = yes
-# max_restarts = 0
-# subscribe_to = 
-
-# Example: Calendar Manager
-# [tool:calendar]
-# command = /usr/local/bin/python3 /path/to/calendar.py
-# description = Calendar event manager
-# autostart = yes
-# restart_on_crash = yes
-# max_restarts = 3
-# subscribe_to = NEW_EMAIL,ADD_CALENDAR
-
-# Example: On-Demand Tool (manual start)
-# [tool:backup]
-# command = /usr/local/bin/backup.sh
-# description = Backup utility
-# autostart = no          # Don't start automatically
-# restart_on_crash = no
-# subscribe_to = 
-
-# Example: Watchdog Tool (using Control API)
-# [tool:watchdog]
-# command = /path/to/watchdog
-# description = Monitors and restarts crashed tools
-# autostart = yes
-# restart_on_crash = yes
-# subscribe_to = 
-
-# ============================================
 # Configuration Notes
 # ============================================
+
+# NEW in v2.0:
+#   - Console is a tool! Just add [tool:console] with autostart=yes
+#   - Unified architecture: everything uses pipes (stdin/stdout)
+#   - No more -i flag needed
+#   - Console can be started/stopped like any other tool
 
 # Tool Configuration Options:
 #   command           - Full path to executable (required)
@@ -114,28 +97,21 @@ subscribe_to = MESSAGE,ACK
 #   subscribe_to = EVENT1,EVENT2,EVENT3
 #   Leave empty for no subscriptions
 
-# Path Guidelines:
-#   - Use absolute paths for commands
-#   - Make sure executables have execute permission
-#   - Test tools manually before adding to framework
-
-# Logging Levels:
-#   TRACE - Very detailed (development only)
-#   DEBUG - Detailed information
-#   INFO  - General information (recommended)
-#   WARN  - Warnings
-#   ERROR - Errors only
-#   FATAL - Fatal errors only
-
-# v2.0 New Features:
-#   - Integrated Control API - any tool can manage other tools
-#   - Interactive console mode (start with -i flag)
-#   - No separate control executable needed
-#   - Tools can use control_start_tool(), control_stop_tool(), etc.
-#   - See docs/CONTROL_API.md for complete reference
+# Console Commands:
+#   list                 - List all tools
+#   start <tool>         - Start a tool
+#   stop <tool>          - Stop a tool
+#   restart <tool>       - Restart a tool
+#   status <tool>        - Show detailed status
+#   uptime               - Framework uptime
+#   version              - Version info
+#   shutdown             - Shutdown framework
+#   help                 - Show help
+#   quit                 - Exit console (framework continues)
 
 # Quick Start:
 #   1. Edit this file to add your tools
-#   2. Run: ./yuki-frame -c yuki-frame.conf
-#   3. Or with console: ./yuki-frame -c yuki-frame.conf -i
-#   4. In console: type 'list', 'start tool_name', 'help', etc.
+#   2. Make sure yuki-console.py is in same directory as executable
+#   3. Run: ./yuki-frame -c yuki-frame.conf
+#   4. Console starts automatically!
+#   5. Type 'help' for available commands

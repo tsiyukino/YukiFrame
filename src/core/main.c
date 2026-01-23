@@ -13,7 +13,6 @@
 #include "yuki_frame/event.h"
 #include "yuki_frame/platform.h"
 #include "yuki_frame/control_api.h"
-#include "yuki_frame/console.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +25,6 @@ void control_api_init(void);
 // Global state
 FrameworkConfig g_config;
 bool g_running = true;
-bool g_enable_console = false;  // Global console enable flag
 
 // Signal handler
 void signal_handler(int sig) {
@@ -55,15 +53,16 @@ void print_usage(const char* prog_name) {
     printf("  -h, --help          Show this help message\n");
     printf("  -v, --version       Show version information\n");
     printf("  -d, --debug         Enable debug mode\n");
-    printf("  -i, --interactive   Enable interactive console\n");
     printf("\n");
     printf("Interactive Console:\n");
-    printf("  When enabled, you can type commands directly:\n");
-    printf("    list, start <tool>, stop <tool>, status <tool>, etc.\n");
+    printf("  The console is now a tool! Add it to your config:\n");
+    printf("    [tool:console]\n");
+    printf("    command = python yuki-console.py\n");
+    printf("    autostart = yes\n");
     printf("\n");
     printf("Examples:\n");
     printf("  %s -c yuki-frame.conf\n", prog_name);
-    printf("  %s -c yuki-frame.conf -i     # With interactive console\n", prog_name);
+    printf("  %s -c yuki-frame.conf -d     # With debug mode\n", prog_name);
     printf("\n");
 }
 
@@ -125,15 +124,6 @@ int framework_init(const char* config_file) {
     control_api_init();
     LOG_INFO("main", "Control API initialized");
     
-    // Initialize console if enabled
-    if (g_enable_console) {
-        ret = console_init();
-        if (ret != FW_OK) {
-            LOG_ERROR("main", "Failed to initialize console");
-            return ret;
-        }
-    }
-    
     // Load and register tools from configuration
     ToolConfig* tools;
     int tool_count;
@@ -173,22 +163,19 @@ int framework_init(const char* config_file) {
     }
     
     LOG_INFO("main", "Framework initialized successfully");
-    if (g_enable_console) {
-        LOG_INFO("main", "Interactive console available (will start after main loop begins)");
-    }
     return FW_OK;
 }
+
+// Forward declaration
+void handle_console_command(const char* tool_name, const char* command);
 
 // Main loop
 void framework_run(void) {
     LOG_INFO("main", "Entering main loop");
     
-    // Start console if enabled
-    if (g_enable_console) {
-        console_start();
-    }
-    
     char buffer[4096];
+    char line_buffer[8192];  // Buffer for accumulating partial lines
+    int line_pos = 0;
     
     while (g_running) {
         // Process events
@@ -198,13 +185,39 @@ void framework_run(void) {
         Tool* tool = tool_get_first();
         while (tool) {
             if (tool->status == TOOL_RUNNING) {
-                // Read stdout
+                // Read stdout (events and commands)
                 if (tool->stdout_fd >= 0) {
                     int bytes = platform_read_nonblocking(tool->stdout_fd, buffer, sizeof(buffer) - 1);
                     if (bytes > 0) {
                         buffer[bytes] = '\0';
-                        LOG_DEBUG("main", "Tool %s stdout: %s", tool->name, buffer);
-                        // TODO: Parse as event and publish
+                        
+                        // Accumulate into line buffer
+                        for (int i = 0; i < bytes && line_pos < (int)sizeof(line_buffer) - 1; i++) {
+                            if (buffer[i] == '\n') {
+                                line_buffer[line_pos] = '\0';
+                                
+                                // Parse event: TYPE|sender|data
+                                char* type = strtok(line_buffer, "|");
+                                char* sender = strtok(NULL, "|");
+                                char* data = strtok(NULL, "");
+                                
+                                if (type && sender && data) {
+                                    if (strcmp(type, "COMMAND") == 0) {
+                                        // Console command - handle it
+                                        LOG_DEBUG("main", "Command from %s: %s", sender, data);
+                                        handle_console_command(sender, data);
+                                    } else {
+                                        // Regular event - publish to event bus
+                                        LOG_DEBUG("main", "Event from %s: %s|%s", sender, type, data);
+                                        event_publish(type, sender, data);
+                                    }
+                                }
+                                
+                                line_pos = 0;
+                            } else {
+                                line_buffer[line_pos++] = buffer[i];
+                            }
+                        }
                     }
                 }
                 
@@ -238,11 +251,6 @@ void framework_run(void) {
 void framework_shutdown(void) {
     LOG_INFO("main", "Shutting down framework");
     
-    // Shutdown console
-    if (g_enable_console) {
-        console_shutdown();
-    }
-    
     // Stop all tools
     Tool* tool = tool_get_first();
     while (tool) {
@@ -270,11 +278,184 @@ const char* framework_version(void) {
     return YUKI_FRAME_VERSION_STRING;
 }
 
+// Handle console commands
+void handle_console_command(const char* tool_name, const char* command) {
+    char response[8192];
+    response[0] = '\0';
+    
+    // Parse command
+    char cmd_copy[1024];
+    strncpy(cmd_copy, command, sizeof(cmd_copy) - 1);
+    cmd_copy[sizeof(cmd_copy) - 1] = '\0';
+    
+    char* cmd = strtok(cmd_copy, " ");
+    char* arg1 = strtok(NULL, " ");
+    char* arg2 = strtok(NULL, " ");
+    
+    if (!cmd) {
+        snprintf(response, sizeof(response), "RESPONSE|framework|Error: Empty command\n");
+        tool_send_event(tool_name, response);
+        return;
+    }
+    
+    // Convert to lowercase
+    for (char* p = cmd; *p; p++) {
+        *p = tolower(*p);
+    }
+    
+    // Execute command
+    if (strcmp(cmd, "list") == 0) {
+        int offset = 0;
+        offset += snprintf(response + offset, sizeof(response) - offset,
+                          "\nTools Status:\n");
+        offset += snprintf(response + offset, sizeof(response) - offset,
+                          "%-20s %-10s %-10s\n", "Name", "Status", "PID");
+        offset += snprintf(response + offset, sizeof(response) - offset,
+                          "------------------------------------------------------------\n");
+        
+        Tool* tool = tool_get_first();
+        while (tool && offset < (int)sizeof(response) - 100) {
+            const char* status_str;
+            switch (tool->status) {
+                case TOOL_STOPPED: status_str = "STOPPED"; break;
+                case TOOL_RUNNING: status_str = "RUNNING"; break;
+                case TOOL_CRASHED: status_str = "CRASHED"; break;
+                case TOOL_ERROR:   status_str = "ERROR";   break;
+                default:           status_str = "UNKNOWN"; break;
+            }
+            
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "%-20s %-10s %-10d\n", tool->name, status_str, (int)tool->pid);
+            tool = tool_get_next();
+        }
+        snprintf(response + offset, sizeof(response) - offset, "\n");
+    }
+    else if (strcmp(cmd, "start") == 0 && arg1) {
+        int result = tool_start(arg1);
+        if (result == FW_OK) {
+            Tool* tool = tool_find(arg1);
+            snprintf(response, sizeof(response),
+                    "Success: Tool '%s' started\n  PID: %d\n  Status: RUNNING\n",
+                    arg1, tool ? (int)tool->pid : 0);
+        } else if (result == FW_ERROR_NOT_FOUND) {
+            snprintf(response, sizeof(response),
+                    "Error: Tool '%s' not found in configuration\n", arg1);
+        } else {
+            snprintf(response, sizeof(response),
+                    "Error: Failed to start tool '%s'\n", arg1);
+        }
+    }
+    else if (strcmp(cmd, "stop") == 0 && arg1) {
+        int result = tool_stop(arg1);
+        if (result == FW_OK) {
+            snprintf(response, sizeof(response),
+                    "Success: Tool '%s' stopped\n", arg1);
+        } else {
+            snprintf(response, sizeof(response),
+                    "Error: Failed to stop tool '%s'\n", arg1);
+        }
+    }
+    else if (strcmp(cmd, "restart") == 0 && arg1) {
+        int result = tool_restart(arg1);
+        if (result == FW_OK) {
+            Tool* tool = tool_find(arg1);
+            snprintf(response, sizeof(response),
+                    "Success: Tool '%s' restarted\n  PID: %d\n",
+                    arg1, tool ? (int)tool->pid : 0);
+        } else {
+            snprintf(response, sizeof(response),
+                    "Error: Failed to restart tool '%s'\n", arg1);
+        }
+    }
+    else if (strcmp(cmd, "status") == 0 && arg1) {
+        Tool* tool = tool_find(arg1);
+        
+        if (!tool) {
+            snprintf(response, sizeof(response),
+                    "Error: Tool '%s' not found\n", arg1);
+        } else {
+            int offset = 0;
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "\nTool Status:\n");
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "  Name: %s\n", tool->name);
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "  Command: %s\n", tool->command);
+            if (strlen(tool->description) > 0) {
+                offset += snprintf(response + offset, sizeof(response) - offset,
+                                 "  Description: %s\n", tool->description);
+            }
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "  Status: %s\n",
+                             tool->status == TOOL_RUNNING ? "RUNNING" :
+                             tool->status == TOOL_STOPPED ? "STOPPED" :
+                             tool->status == TOOL_CRASHED ? "CRASHED" : "UNKNOWN");
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "  PID: %d\n", (int)tool->pid);
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "  Autostart: %s\n", tool->autostart ? "yes" : "no");
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "  Restart on crash: %s\n", tool->restart_on_crash ? "yes" : "no");
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "  Events sent: %lu\n", tool->events_sent);
+            offset += snprintf(response + offset, sizeof(response) - offset,
+                             "  Events received: %lu\n", tool->events_received);
+            snprintf(response + offset, sizeof(response) - offset, "\n");
+        }
+    }
+    else if (strcmp(cmd, "shutdown") == 0) {
+        snprintf(response, sizeof(response), "Shutting down framework...\n");
+        g_running = false;
+    }
+    else if (strcmp(cmd, "uptime") == 0) {
+        // Calculate uptime
+        static time_t start_time = 0;
+        if (start_time == 0) start_time = time(NULL);
+        
+        time_t now = time(NULL);
+        uint64_t uptime = (uint64_t)(now - start_time);
+        uint64_t hours = uptime / 3600;
+        uint64_t minutes = (uptime % 3600) / 60;
+        uint64_t seconds = uptime % 60;
+        
+        snprintf(response, sizeof(response),
+                "Framework uptime: %luh %lum %lus\n",
+                (unsigned long)hours, (unsigned long)minutes, (unsigned long)seconds);
+    }
+    else if (strcmp(cmd, "version") == 0) {
+        snprintf(response, sizeof(response),
+                "Yuki-Frame version %s\n", framework_version());
+    }
+    else if (strcmp(cmd, "help") == 0) {
+        snprintf(response, sizeof(response),
+                "\nAvailable commands:\n"
+                "  list                 - List all tools and their status\n"
+                "  start <tool>         - Start a tool\n"
+                "  stop <tool>          - Stop a tool\n"
+                "  restart <tool>       - Restart a tool\n"
+                "  status <tool>        - Show detailed tool status\n"
+                "  uptime               - Show framework uptime\n"
+                "  version              - Show framework version\n"
+                "  shutdown             - Shutdown the framework\n"
+                "  help                 - Show this help message\n"
+                "\n");
+    }
+    else {
+        snprintf(response, sizeof(response),
+                "Error: Unknown command '%s'\nType 'help' for available commands\n",
+                cmd);
+    }
+    
+    // Send response back to console tool
+    char response_event[8192];
+    snprintf(response_event, sizeof(response_event), "RESPONSE|framework|%s", response);
+    tool_send_event(tool_name, response_event);
+}
+
 // Main entry point
 int main(int argc, char** argv) {
     const char* config_file = "yuki-frame.conf";
     bool debug_mode = false;
-    bool interactive_mode = false;
     
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
@@ -297,9 +478,6 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
             debug_mode = true;
         }
-        else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--interactive") == 0) {
-            interactive_mode = true;
-        }
     }
     
     // Setup signal handlers
@@ -309,22 +487,20 @@ int main(int argc, char** argv) {
     signal(SIGHUP, signal_handler);
 #endif
     
+    // Set debug flag before framework_init()
+    if (debug_mode) {
+        g_config.enable_debug = true;
+    }
+    
     // Initialize framework
     if (framework_init(config_file) != FW_OK) {
         fprintf(stderr, "Failed to initialize framework\n");
         return 1;
     }
     
-    // Override debug if command line flag set
+    // Override logger level if debug mode
     if (debug_mode) {
-        g_config.enable_debug = true;
         logger_set_level(LOG_DEBUG);
-        debug_init();
-    }
-    
-    // Override console if command line flag set
-    if (interactive_mode) {
-        g_enable_console = true;
     }
     
     // Run main loop

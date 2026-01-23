@@ -1,24 +1,24 @@
 # Yuki-Frame v2.0
 
-**Event-driven tool orchestration framework with integrated control**
+**Event-driven tool orchestration framework with unified pipe architecture**
 
-Yuki-Frame is a lightweight framework for orchestrating multiple tools through events and direct control. Tools communicate via stdin/stdout, and can manage each other using the integrated Control API.
+Yuki-Frame is a lightweight framework for orchestrating multiple tools through events. **Everything is a tool** - including the console! All tools communicate via stdin/stdout pipes for a uniform, elegant architecture.
 
 ## What's New in v2.0 🎉
 
-### Integrated Control API
-- **Control is built into the framework** - no separate executable needed
-- **Any tool can manage other tools** - start, stop, restart, query status
-- **Interactive console mode** - type commands directly with `-i` flag
-- **Simpler architecture** - one executable, easier to understand
+### Unified Pipe Architecture
+- **Everything is a tool** - Console, monitor, alerter, all use the same pattern
+- **Consistent communication** - All tools use stdin/stdout (no special cases!)
+- **Simple and elegant** - One communication method for everything
+- **Easy to test** - Just pipes, no complex IPC
 
 ### Key Features
 - ✅ Event-driven inter-tool communication
-- ✅ Integrated Control API for tool management
-- ✅ Interactive console for quick operations
+- ✅ Interactive console (as a tool!)
 - ✅ Automatic tool restart on crash
 - ✅ Health monitoring and statistics
 - ✅ Cross-platform (Linux, Windows, macOS)
+- ✅ Language-agnostic (Python, Bash, C, any language!)
 
 ## Quick Start
 
@@ -45,85 +45,60 @@ Edit `yuki-frame.conf`:
 log_file = logs/yuki-frame.log
 log_level = INFO
 
+# Console is a tool!
+[tool:console]
+command = python yuki-console.py
+autostart = yes           # Start automatically
+
 [tool:monitor]
 command = python tools/monitor.py
 autostart = yes
 restart_on_crash = yes
 subscribe_to = ALERT
-
-[tool:alerter]
-command = python tools/alerter.py
-autostart = yes
-restart_on_crash = yes
-subscribe_to = ALERT,ERROR
 ```
 
 ### 3. Run
 
 ```bash
-# Basic mode
+# Just start the framework - console starts automatically!
 ./yuki-frame -c yuki-frame.conf
 
-# Interactive console mode (recommended!)
-./yuki-frame -c yuki-frame.conf -i
-```
+# Console appears:
+============================================================
+  Yuki-Frame Interactive Console v2.0.0
+  Type 'help' for commands, 'quit' to exit
+============================================================
 
-### 4. Use Interactive Console
-
-```
 yuki> list
-Tools Status:
-Name                 Status     PID       
-------------------------------------------------------------
-monitor              RUNNING    12345     
-alerter              RUNNING    12346     
-
 yuki> start backup
-Success: Tool 'backup' started
-
-yuki> status monitor
-Tool Status:
-  Name: monitor
-  Status: RUNNING
-  PID: 12345
-  Events sent: 42
-
 yuki> help
-Available commands:
-  list, start <tool>, stop <tool>, status <tool>, ...
-
-yuki> quit
 ```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
-│         Yuki-Frame Process              │
+│         Yuki-Frame (Hub)                │
 │                                         │
-│  ┌───────────────────────────────────┐ │
-│  │  Control API (Integrated!)        │ │
-│  │  • control_start_tool()           │ │
-│  │  • control_stop_tool()            │ │
-│  │  • control_list_tools()           │ │
-│  └───────────────────────────────────┘ │
-│                 ▲                       │
-│                 │                       │
-│  ┌──────────────┴────────────────────┐ │
-│  │  Tool Manager                     │ │
-│  │  • monitor      (PID: 12345)      │ │
-│  │  • alerter      (PID: 12346)      │ │
-│  │  • backup       (STOPPED)         │ │
-│  └───────────────────────────────────┘ │
-│                                         │
+│  Event Router + Tool Manager            │
+│  • Routes events between tools          │
+│  • Manages tool lifecycle               │
+│  • Handles commands from console        │
 └─────────────────────────────────────────┘
+      ▲       ▲        ▲         ▲
+      │       │        │         │
+  stdin/    stdin/   stdin/   stdin/
+  stdout    stdout   stdout   stdout
+      │       │        │         │
+   Console  Monitor  Alerter  Your Tool
+   (tool)   (tool)   (tool)   (tool)
 ```
 
-**Any tool can use the Control API** to manage other tools!
+**Everything uses the same pattern!** ✅
 
 ## Tool Development
 
-Tools communicate via stdin/stdout:
+### Basic Tool (Python)
 
 ```python
 #!/usr/bin/env python3
@@ -131,46 +106,68 @@ import sys
 import signal
 
 running = True
+signal.signal(signal.SIGTERM, lambda s,f: globals().__setitem__('running', False))
 
-def signal_handler(sig, frame):
-    global running
-    running = False
+print("[INFO] Started", file=sys.stderr)
 
-signal.signal(signal.SIGTERM, signal_handler)
-
-# Log to stderr
-print("[INFO] Tool started", file=sys.stderr)
-
-# Send events to stdout
-print("STATUS|my_tool|System OK")
-sys.stdout.flush()  # CRITICAL!
-
-# Read events from stdin
+# Main loop
 for line in sys.stdin:
     if not running:
         break
     
-    event_type, sender, data = line.strip().split('|', 2)
-    print(f"[INFO] Received {event_type}", file=sys.stderr)
+    # Parse event: TYPE|sender|data
+    parts = line.strip().split('|', 2)
+    if len(parts) >= 3:
+        event_type, sender, data = parts
+        
+        # Process event
+        print(f"[INFO] Got {event_type} from {sender}", file=sys.stderr)
+        
+        # Send response
+        print(f"RESPONSE|my_tool|Processed {event_type}")
+        sys.stdout.flush()
 
-print("[INFO] Tool stopped", file=sys.stderr)
+print("[INFO] Stopped", file=sys.stderr)
 ```
 
-**C/C++ tools can use the Control API:**
+### Console Tool
 
-```c
-#include "yuki_frame/control_api.h"
+The console is just a tool that:
+- Receives user input from terminal
+- Sends COMMAND events to framework
+- Receives RESPONSE events back
+- Displays responses to user
 
-// Start another tool
-control_start_tool("backup");
+**See `yuki-console.py` for full implementation!**
 
-// Get tool status
-ControlToolInfo info;
-control_get_tool_status("monitor", &info);
-printf("Monitor PID: %u\n", info.pid);
+## Console Commands
 
-// List all tools
-control_list_tools(my_callback, NULL);
+```
+list                 - List all tools and their status
+start <tool>         - Start a tool
+stop <tool>          - Stop a tool
+restart <tool>       - Restart a tool
+status <tool>        - Show detailed tool status
+uptime               - Show framework uptime
+version              - Show framework version
+shutdown             - Shutdown the framework
+help                 - Show this help message
+quit                 - Exit console (framework continues)
+```
+
+## Event Protocol
+
+All tools communicate using simple text events:
+
+```
+Format: TYPE|sender|data
+
+Examples:
+ALERT|monitor|High CPU usage: 95%
+STATUS|backup|Backup completed successfully
+ERROR|database|Connection failed
+COMMAND|console|start backup
+RESPONSE|framework|Tool 'backup' started PID 12345
 ```
 
 ## Use Cases
@@ -211,34 +208,11 @@ autostart = yes
 subscribe_to = FILE_PROCESSED  # Sends notifications
 ```
 
-### Tool Orchestration (NEW!)
-```c
-// Watchdog tool using Control API
-#include "yuki_frame/control_api.h"
-
-bool check_tool(const ControlToolInfo* info, void* data) {
-    if (info->status == TOOL_CRASHED) {
-        control_restart_tool(info->name);
-    }
-    return true;
-}
-
-int main() {
-    while (1) {
-        control_list_tools(check_tool, NULL);
-        sleep(10);
-    }
-}
-```
-
 ## Command Line Options
 
 ```bash
 # Start framework
 yuki-frame -c config.conf
-
-# With interactive console
-yuki-frame -c config.conf -i
 
 # With debug mode
 yuki-frame -c config.conf -d
@@ -255,11 +229,11 @@ yuki-frame -h
 | Document | Description |
 |----------|-------------|
 | **README.md** | This file - quick start and overview |
-| **[docs/CONTROL_API.md](docs/CONTROL_API.md)** | Complete Control API reference |
+| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Design philosophy and architecture |
 | **[docs/TOOL_DEVELOPMENT.md](docs/TOOL_DEVELOPMENT.md)** | Guide to writing tools |
 | **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** | Framework development guide |
 | **[docs/TESTING.md](docs/TESTING.md)** | Testing and debugging |
-| **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Version history and migration guide |
+| **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Version history |
 | **LICENSE** | MIT License |
 
 ## Platform Support
@@ -267,7 +241,6 @@ yuki-frame -h
 - ✅ **Linux** (tested on Ubuntu 20.04+)
 - ✅ **Windows** (tested on Windows 10/11)
 - ✅ **macOS** (tested on macOS 12+)
-- ⚠️  Console mode: Unix/Linux only (uses pthread)
 
 ## Examples
 
@@ -276,50 +249,79 @@ See `tools/` directory for example tools:
 - `alerter.py` - Alert processing
 - `echo.py` - Simple echo tool
 - `sender.py` / `receiver.py` - Message passing example
+- **`yuki-console.py`** - Interactive console (reference implementation)
+
+## Philosophy
+
+### Everything is a Tool
+
+**Why this design?**
+
+1. **Simplicity** - One communication pattern for everything
+2. **Consistency** - No special cases, no exceptions
+3. **Testability** - Just pipes, easy to test
+4. **Flexibility** - Add/remove tools without changing framework
+5. **Language-agnostic** - Works with any language
+
+**Even the console is a tool!**
+
+```
+Traditional:                 Yuki-Frame:
+Framework ← socket ← Console    Framework ← pipes ← Console (tool)
+Framework ← pipes ← Tools       Framework ← pipes ← Other tools
+
+(Asymmetric)                    (Symmetric!) ✅
+```
 
 ## Migration from v1.0
 
-**What changed:**
-- Control is now integrated (no separate `yuki-control` executable)
-- Interactive console mode available with `-i` flag
-- C/C++ tools can use Control API directly
-- Simpler configuration (no control module needed)
+**No breaking changes for existing tools!**
 
-**Old way (v1.0):**
-```bash
-./yuki-control start my_tool
-```
+Tools using stdin/stdout continue to work as-is.
 
-**New way (v2.0):**
+**What's new:**
+- Console is now configured as a tool
+- Remove `-i` flag (not needed anymore)
+- Add `[tool:console]` section to config
+
+**Old way:**
 ```bash
 ./yuki-frame -c config.conf -i
-yuki> start my_tool
 ```
 
-Or from C/C++ tools:
-```c
-control_start_tool("my_tool");
-```
+**New way:**
+```bash
+# Just add console to config
+[tool:console]
+command = python yuki-console.py
+autostart = yes
 
-See `docs/CHANGELOG.md` for complete migration guide.
+# Then run
+./yuki-frame -c config.conf
+# Console starts automatically!
+```
 
 ## Troubleshooting
 
-### Tools not starting?
+### Console not appearing?
 ```bash
+# Check if console tool is in config
+[tool:console]
+command = python yuki-console.py  # ← Must point to yuki-console.py
+autostart = yes                   # ← Must be yes
+
 # Check logs
 tail -f logs/yuki-frame.log
-
-# Enable debug mode
-./yuki-frame -c config.conf -d
 ```
 
-### Can't control tools?
+### Tools not starting?
 ```bash
-# Use interactive console
-./yuki-frame -c config.conf -i
-yuki> list
-yuki> start my_tool
+# Enable debug mode
+./yuki-frame -c config.conf -d
+
+# Check tool paths are correct
+[tool:my_tool]
+command = /full/path/to/tool.py  # ← Use absolute path
 ```
 
 ### Events not routing?
@@ -354,7 +356,7 @@ See `docs/CHANGELOG.md` for complete version history.
 
 ### Start Framework
 ```bash
-./yuki-frame -c yuki-frame.conf -i
+./yuki-frame -c yuki-frame.conf
 ```
 
 ### Console Commands
@@ -366,26 +368,21 @@ restart <tool>          # Restart a tool
 status <tool>           # Show detailed status
 shutdown                # Shutdown framework
 help                    # Show help
-quit                    # Exit console (framework continues)
+quit                    # Exit console
 ```
 
 ### Create a Tool
 ```python
 #!/usr/bin/env python3
 import sys
-import signal
-
-running = True
-signal.signal(signal.SIGTERM, lambda s,f: globals().__setitem__('running', False))
 
 print("[INFO] Started", file=sys.stderr)
 
 for line in sys.stdin:
-    if not running: break
+    event = line.strip().split('|', 2)
+    # Process event
     print("RESPONSE|tool|OK")
     sys.stdout.flush()
-
-print("[INFO] Stopped", file=sys.stderr)
 ```
 
 ### Add to Config
@@ -397,4 +394,4 @@ restart_on_crash = yes
 subscribe_to = EVENT_TYPE
 ```
 
-**See `docs/TOOL_DEVELOPMENT.md` for complete guide!**
+**Everything is a tool. Everything uses pipes. Simple!** ✅
