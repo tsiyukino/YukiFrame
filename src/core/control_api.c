@@ -71,8 +71,11 @@ int control_get_tool_status(const char* tool_name, ControlToolInfo* info) {
     // Fill in the info structure
     memset(info, 0, sizeof(ControlToolInfo));
     strncpy(info->name, tool->name, sizeof(info->name) - 1);
+    info->name[sizeof(info->name) - 1] = '\0';
     strncpy(info->command, tool->command, sizeof(info->command) - 1);
+    info->command[sizeof(info->command) - 1] = '\0';
     strncpy(info->description, tool->description, sizeof(info->description) - 1);
+    info->description[sizeof(info->description) - 1] = '\0';
     info->status = tool->status;
     info->pid = tool->pid;
     info->autostart = tool->autostart;
@@ -101,8 +104,11 @@ int control_list_tools(control_list_callback_t callback, void* user_data) {
         // Fill info structure
         memset(&info, 0, sizeof(ControlToolInfo));
         strncpy(info.name, tool->name, sizeof(info.name) - 1);
+        info.name[sizeof(info.name) - 1] = '\0';
         strncpy(info.command, tool->command, sizeof(info.command) - 1);
+        info.command[sizeof(info.command) - 1] = '\0';
         strncpy(info.description, tool->description, sizeof(info.description) - 1);
+        info.description[sizeof(info.description) - 1] = '\0';
         info.status = tool->status;
         info.pid = tool->pid;
         info.autostart = tool->autostart;

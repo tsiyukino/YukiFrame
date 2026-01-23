@@ -7,6 +7,7 @@ set(FRAMEWORK_LIB_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/tool.c
     ${CMAKE_SOURCE_DIR}/src/core/config.c
     ${CMAKE_SOURCE_DIR}/src/core/control.c
+    ${CMAKE_SOURCE_DIR}/src/core/control_api.c
     ${CMAKE_SOURCE_DIR}/src/core/debug.c
 )
 
