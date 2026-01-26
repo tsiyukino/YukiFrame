@@ -17,13 +17,16 @@ compile_commands.json
 CTestTestfile.cmake
 _deps/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
+# Visual Studio / MSVC
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
 
 # Logs
 *.log
@@ -34,16 +37,12 @@ logs/
 !*.conf.example
 
 # Package files
-*.deb
-*.rpm
 *.zip
-*.tar.gz
-*.tgz
+*.msi
 
 # Debug
-core.*
-vgcore.*
-*.dSYM/
+*.pdb
+*.ilk
 
 # Testing
 Testing/
@@ -53,10 +52,11 @@ tests/build/
 *.pid
 *.lock
 
-# OS
+# Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+$RECYCLE.BIN/
 
 # Secrets
 *.key

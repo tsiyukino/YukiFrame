@@ -12,29 +12,17 @@
 #define YUKI_FRAME_VERSION_STRING "2.0.0"
 #define YUKI_FRAME_NAME "Yuki-Frame"
 
-// Platform detection - don't redefine if already defined by CMake
+// Platform detection - Windows only
 #ifndef PLATFORM_WINDOWS
-#ifndef PLATFORM_LINUX
-#ifdef _WIN32
-    #define PLATFORM_WINDOWS
-#else
-    #define PLATFORM_LINUX
-#endif
-#endif
+#define PLATFORM_WINDOWS
 #endif
 
-// Platform-specific includes and types
-#ifdef PLATFORM_WINDOWS
-    #include <windows.h>
-    typedef HANDLE ProcessHandle;
-    typedef DWORD ProcessID;
-    #define SIGHUP -1  // Not used on Windows, define as dummy
-#else
-    #include <sys/types.h>
-    #include <signal.h>
-    typedef pid_t ProcessHandle;
-    typedef pid_t ProcessID;
-#endif
+// Windows-specific includes and types
+// IMPORTANT: winsock2.h must be included before windows.h
+#include <winsock2.h>
+#include <windows.h>
+typedef HANDLE ProcessHandle;
+typedef DWORD ProcessID;
 
 // Error codes
 typedef enum {
@@ -89,7 +77,7 @@ extern FrameworkConfig g_config;
 extern bool g_running;
 
 // Core framework functions
-int framework_init(const char* config_file);
+int framework_init(const char* config_file, int control_port);
 void framework_run(void);
 void framework_shutdown(void);
 const char* framework_version(void);

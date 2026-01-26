@@ -1,8 +1,8 @@
 # Yuki-Frame v2.0
 
-**Event-driven tool orchestration framework with unified pipe architecture**
+**Event-driven tool orchestration framework for Windows**
 
-Yuki-Frame is a lightweight framework for orchestrating multiple tools through events. **Everything is a tool** - including the console! All tools communicate via stdin/stdout pipes for a uniform, elegant architecture.
+Yuki-Frame is a lightweight framework for orchestrating multiple tools through events on Windows. **Everything is a tool** - including the console! All tools communicate via stdin/stdout pipes for a uniform, elegant architecture.
 
 ## What's New in v2.0 🎉
 
@@ -17,23 +17,45 @@ Yuki-Frame is a lightweight framework for orchestrating multiple tools through e
 - ✅ Interactive console (as a tool!)
 - ✅ Automatic tool restart on crash
 - ✅ Health monitoring and statistics
-- ✅ Cross-platform (Linux, Windows, macOS)
-- ✅ Language-agnostic (Python, Bash, C, any language!)
+- ✅ Windows-native implementation
+- ✅ Language-agnostic (Python, PowerShell, C, any language!)
+
+## Platform Support
+
+- ✅ **Windows 10/11** (Primary platform)
+- ✅ **Windows Server 2019+** (Server support)
+
+This project is **Windows-only** and optimized for the Windows platform.
 
 ## Quick Start
 
 ### 1. Build
 
-```bash
-# Linux/macOS
-mkdir build && cd build
-cmake ..
-cmake --build .
+**Requirements:**
+- Visual Studio 2019 or later (with C++ tools)
+- CMake 3.10+
+- Python 3.8+ (for tool examples)
 
-# Windows
-mkdir build && cd build
+**Build steps:**
+
+```cmd
+REM Create build directory
+mkdir build
+cd build
+
+REM Configure with CMake
 cmake ..
+
+REM Build
 cmake --build . --config Release
+
+REM You should now have yuki-frame.exe in build\Release\
+```
+
+Or use the convenient batch script:
+
+```cmd
+build.bat
 ```
 
 ### 2. Configure
@@ -42,7 +64,7 @@ Edit `yuki-frame.conf`:
 
 ```ini
 [core]
-log_file = logs/yuki-frame.log
+log_file = C:\ProgramData\yuki-frame\logs\yuki-frame.log
 log_level = INFO
 
 # Console is a tool!
@@ -51,7 +73,7 @@ command = python yuki-console.py
 autostart = yes           # Start automatically
 
 [tool:monitor]
-command = python tools/monitor.py
+command = python tools\monitor.py
 autostart = yes
 restart_on_crash = yes
 subscribe_to = ALERT
@@ -59,11 +81,11 @@ subscribe_to = ALERT
 
 ### 3. Run
 
-```bash
-# Just start the framework - console starts automatically!
-./yuki-frame -c yuki-frame.conf
+```cmd
+REM Start the framework - console starts automatically!
+yuki-frame.exe -c yuki-frame.conf
 
-# Console appears:
+REM Console appears:
 ============================================================
   Yuki-Frame Interactive Console v2.0.0
   Type 'help' for commands, 'quit' to exit
@@ -130,6 +152,25 @@ for line in sys.stdin:
 print("[INFO] Stopped", file=sys.stderr)
 ```
 
+### Basic Tool (PowerShell)
+
+```powershell
+# Listen for events on stdin
+while ($line = [Console]::ReadLine()) {
+    if ($line -match '^(.+)\|(.+)\|(.+)$') {
+        $eventType = $Matches[1]
+        $sender = $Matches[2]
+        $data = $Matches[3]
+        
+        # Process event
+        Write-Host "[INFO] Received $eventType from $sender" -ForegroundColor Yellow
+        
+        # Send response
+        Write-Output "RESPONSE|my_tool|Processed"
+    }
+}
+```
+
 ### Console Tool
 
 The console is just a tool that:
@@ -186,10 +227,10 @@ max_restarts = 10
 autostart = no          # Start manually when needed
 ```
 
-```bash
-# In console:
+```cmd
+REM In console:
 yuki> start backup
-# ... backup runs ...
+REM ... backup runs ...
 yuki> stop backup
 ```
 
@@ -210,18 +251,18 @@ subscribe_to = FILE_PROCESSED  # Sends notifications
 
 ## Command Line Options
 
-```bash
-# Start framework
-yuki-frame -c config.conf
+```cmd
+REM Start framework
+yuki-frame.exe -c config.conf
 
-# With debug mode
-yuki-frame -c config.conf -d
+REM With debug mode
+yuki-frame.exe -c config.conf -d
 
-# Show version
-yuki-frame -v
+REM Show version
+yuki-frame.exe -v
 
-# Show help
-yuki-frame -h
+REM Show help
+yuki-frame.exe -h
 ```
 
 ## Documentation
@@ -235,12 +276,6 @@ yuki-frame -h
 | **[docs/TESTING.md](docs/TESTING.md)** | Testing and debugging |
 | **[docs/CHANGELOG.md](docs/CHANGELOG.md)** | Version history |
 | **LICENSE** | MIT License |
-
-## Platform Support
-
-- ✅ **Linux** (tested on Ubuntu 20.04+)
-- ✅ **Windows** (tested on Windows 10/11)
-- ✅ **macOS** (tested on macOS 12+)
 
 ## Examples
 
@@ -273,55 +308,27 @@ Framework ← pipes ← Tools       Framework ← pipes ← Other tools
 (Asymmetric)                    (Symmetric!) ✅
 ```
 
-## Migration from v1.0
-
-**No breaking changes for existing tools!**
-
-Tools using stdin/stdout continue to work as-is.
-
-**What's new:**
-- Console is now configured as a tool
-- Remove `-i` flag (not needed anymore)
-- Add `[tool:console]` section to config
-
-**Old way:**
-```bash
-./yuki-frame -c config.conf -i
-```
-
-**New way:**
-```bash
-# Just add console to config
-[tool:console]
-command = python yuki-console.py
-autostart = yes
-
-# Then run
-./yuki-frame -c config.conf
-# Console starts automatically!
-```
-
 ## Troubleshooting
 
 ### Console not appearing?
-```bash
-# Check if console tool is in config
+```cmd
+REM Check if console tool is in config
 [tool:console]
-command = python yuki-console.py  # ← Must point to yuki-console.py
-autostart = yes                   # ← Must be yes
+command = python yuki-console.py  REM ← Must point to yuki-console.py
+autostart = yes                   REM ← Must be yes
 
-# Check logs
-tail -f logs/yuki-frame.log
+REM Check logs
+type C:\ProgramData\yuki-frame\logs\yuki-frame.log
 ```
 
 ### Tools not starting?
-```bash
-# Enable debug mode
-./yuki-frame -c config.conf -d
+```cmd
+REM Enable debug mode
+yuki-frame.exe -c config.conf -d
 
-# Check tool paths are correct
+REM Check tool paths are correct
 [tool:my_tool]
-command = /full/path/to/tool.py  # ← Use absolute path
+command = C:\Path\To\tool.py  REM ← Use absolute path
 ```
 
 ### Events not routing?
@@ -355,8 +362,8 @@ See `docs/CHANGELOG.md` for complete version history.
 ## Quick Reference
 
 ### Start Framework
-```bash
-./yuki-frame -c yuki-frame.conf
+```cmd
+yuki-frame.exe -c yuki-frame.conf
 ```
 
 ### Console Commands
@@ -371,7 +378,7 @@ help                    # Show help
 quit                    # Exit console
 ```
 
-### Create a Tool
+### Create a Tool (Python)
 ```python
 #!/usr/bin/env python3
 import sys
@@ -385,10 +392,18 @@ for line in sys.stdin:
     sys.stdout.flush()
 ```
 
+### Create a Tool (PowerShell)
+```powershell
+while ($line = [Console]::ReadLine()) {
+    Write-Host "[INFO] Processing: $line"
+    Write-Output "RESPONSE|tool|OK"
+}
+```
+
 ### Add to Config
 ```ini
 [tool:my_tool]
-command = /path/to/my_tool.py
+command = C:\Path\To\my_tool.py
 autostart = yes
 restart_on_crash = yes
 subscribe_to = EVENT_TYPE

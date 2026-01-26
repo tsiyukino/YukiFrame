@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief Main entry point for Yuki-Frame v2.0
+ * @brief Main entry point for Yuki-Frame v2.0 (Windows)
  * 
  * This version includes integrated control via command file monitoring.
  * No separate control utility needed - all control is built into the framework.
@@ -13,6 +13,7 @@
 #include "yuki_frame/event.h"
 #include "yuki_frame/platform.h"
 #include "yuki_frame/control_api.h"
+#include "yuki_frame/control_socket.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,48 +27,55 @@ void control_api_init(void);
 FrameworkConfig g_config;
 bool g_running = true;
 
-// Signal handler
+// Signal handler (Windows-style)
 void signal_handler(int sig) {
-    switch (sig) {
-        case SIGINT:
-        case SIGTERM:
-            LOG_INFO("main", "Received shutdown signal");
+    if (sig == SIGINT || sig == SIGTERM || sig == SIGABRT) {
+        LOG_INFO("main", "Received shutdown signal");
+        g_running = false;
+    }
+}
+
+// Windows Console Control Handler
+BOOL WINAPI console_ctrl_handler(DWORD ctrl_type) {
+    switch (ctrl_type) {
+        case CTRL_C_EVENT:
+        case CTRL_BREAK_EVENT:
+        case CTRL_CLOSE_EVENT:
+        case CTRL_SHUTDOWN_EVENT:
+            LOG_INFO("main", "Received Windows console control signal");
             g_running = false;
-            break;
-#ifndef PLATFORM_WINDOWS
-        case SIGHUP:
-            LOG_INFO("main", "Received reload signal");
-            config_reload();
-            break;
-#endif
+            return TRUE;
+        default:
+            return FALSE;
     }
 }
 
 // Print usage
 void print_usage(const char* prog_name) {
-    printf("%s v%s - Event-driven tool orchestration framework\n\n", 
+    printf("%s v%s - Event-driven tool orchestration framework for Windows\n\n", 
            YUKI_FRAME_NAME, YUKI_FRAME_VERSION_STRING);
     printf("Usage: %s [OPTIONS]\n\n", prog_name);
     printf("Options:\n");
     printf("  -c, --config FILE    Configuration file (default: yuki-frame.conf)\n");
-    printf("  -h, --help          Show this help message\n");
-    printf("  -v, --version       Show version information\n");
-    printf("  -d, --debug         Enable debug mode\n");
+    printf("  -p, --port PORT      Control socket port (default: 9999)\n");
+    printf("  -h, --help           Show this help message\n");
+    printf("  -v, --version        Show version information\n");
+    printf("  -d, --debug          Enable debug mode\n");
     printf("\n");
-    printf("Interactive Console:\n");
-    printf("  The console is now a tool! Add it to your config:\n");
-    printf("    [tool:console]\n");
-    printf("    command = python yuki-console.py\n");
-    printf("    autostart = yes\n");
+    printf("Control Interface:\n");
+    printf("  The framework includes an integrated control socket server.\n");
+    printf("  Connect using:\n");
+    printf("    python yuki-console.py\n");
     printf("\n");
     printf("Examples:\n");
     printf("  %s -c yuki-frame.conf\n", prog_name);
-    printf("  %s -c yuki-frame.conf -d     # With debug mode\n", prog_name);
+    printf("  %s -c yuki-frame.conf -p 8888   # Custom port\n", prog_name);
+    printf("  %s -c yuki-frame.conf -d        # With debug mode\n", prog_name);
     printf("\n");
 }
 
 // Initialize framework
-int framework_init(const char* config_file) {
+int framework_init(const char* config_file, int control_port) {
     int ret;
     
     // Load configuration
@@ -84,7 +92,9 @@ int framework_init(const char* config_file) {
         return ret;
     }
     
-    LOG_INFO("main", "%s v%s starting", YUKI_FRAME_NAME, YUKI_FRAME_VERSION_STRING);
+    LOG_INFO("main", "========================================");
+    LOG_INFO("main", "%s v%s starting on Windows", YUKI_FRAME_NAME, YUKI_FRAME_VERSION_STRING);
+    LOG_INFO("main", "========================================");
     
     // Initialize platform-specific code
     ret = platform_init();
@@ -124,6 +134,32 @@ int framework_init(const char* config_file) {
     control_api_init();
     LOG_INFO("main", "Control API initialized");
     
+    // ================================================================
+    // INTEGRATED CONTROL SOCKET (PART OF FRAMEWORK!)
+    // ================================================================
+    
+    // Initialize control socket
+    ret = control_socket_init();
+    if (ret != FW_OK) {
+        LOG_ERROR("main", "Failed to initialize control socket");
+        return ret;
+    }
+    
+    // Start control socket server
+    ret = control_socket_start(control_port);
+    if (ret != FW_OK) {
+        LOG_ERROR("main", "Failed to start control socket server");
+        return ret;
+    }
+    
+    LOG_INFO("main", "========================================");
+    LOG_INFO("main", "Control Socket Server: ACTIVE");
+    LOG_INFO("main", "Listening on: localhost:%d", control_port);
+    LOG_INFO("main", "Connect using: python yuki-console.py");
+    LOG_INFO("main", "========================================");
+    
+    // ================================================================
+    
     // Load and register tools from configuration
     ToolConfig* tools;
     int tool_count;
@@ -137,7 +173,7 @@ int framework_init(const char* config_file) {
             
             // Subscribe to events
             if (strlen(tools[i].subscriptions) > 0) {
-                char* subs = strdup(tools[i].subscriptions);
+                char* subs = _strdup(tools[i].subscriptions);
                 char* token = strtok(subs, ",");
                 while (token) {
                     // Trim whitespace
@@ -249,7 +285,14 @@ void framework_run(void) {
 
 // Shutdown framework
 void framework_shutdown(void) {
+    LOG_INFO("main", "========================================");
     LOG_INFO("main", "Shutting down framework");
+    LOG_INFO("main", "========================================");
+    
+    // Stop control socket server (PART OF FRAMEWORK!)
+    control_socket_stop();
+    control_socket_shutdown();
+    LOG_INFO("main", "Control socket server stopped");
     
     // Stop all tools
     Tool* tool = tool_get_first();
@@ -300,7 +343,7 @@ void handle_console_command(const char* tool_name, const char* command) {
     
     // Convert to lowercase
     for (char* p = cmd; *p; p++) {
-        *p = tolower(*p);
+        *p = (char)tolower(*p);
     }
     
     // Execute command
@@ -419,8 +462,8 @@ void handle_console_command(const char* tool_name, const char* command) {
         uint64_t seconds = uptime % 60;
         
         snprintf(response, sizeof(response),
-                "Framework uptime: %luh %lum %lus\n",
-                (unsigned long)hours, (unsigned long)minutes, (unsigned long)seconds);
+                "Framework uptime: %lluh %llum %llus\n",
+                hours, minutes, seconds);
     }
     else if (strcmp(cmd, "version") == 0) {
         snprintf(response, sizeof(response),
@@ -455,6 +498,7 @@ void handle_console_command(const char* tool_name, const char* command) {
 // Main entry point
 int main(int argc, char** argv) {
     const char* config_file = "yuki-frame.conf";
+    int control_port = 9999;  // Default control port
     bool debug_mode = false;
     
     // Parse command line arguments
@@ -464,7 +508,8 @@ int main(int argc, char** argv) {
             return 0;
         }
         else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-            printf("%s v%s\n", YUKI_FRAME_NAME, YUKI_FRAME_VERSION_STRING);
+            printf("%s v%s (Windows)\n", YUKI_FRAME_NAME, YUKI_FRAME_VERSION_STRING);
+            printf("Integrated Control Socket Server\n");
             return 0;
         }
         else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--config") == 0) {
@@ -475,25 +520,46 @@ int main(int argc, char** argv) {
                 return 1;
             }
         }
+        else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) {
+            if (i + 1 < argc) {
+                control_port = atoi(argv[++i]);
+                if (control_port <= 0 || control_port > 65535) {
+                    fprintf(stderr, "Error: Invalid port number\n");
+                    return 1;
+                }
+            } else {
+                fprintf(stderr, "Error: -p requires a port number\n");
+                return 1;
+            }
+        }
         else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
             debug_mode = true;
         }
     }
     
+    // Print banner
+    printf("\n");
+    printf("========================================\n");
+    printf("  %s v%s\n", YUKI_FRAME_NAME, YUKI_FRAME_VERSION_STRING);
+    printf("  Event-driven tool orchestration\n");
+    printf("========================================\n");
+    printf("\n");
+    
     // Setup signal handlers
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
-#ifndef PLATFORM_WINDOWS
-    signal(SIGHUP, signal_handler);
-#endif
+    signal(SIGABRT, signal_handler);
+    
+    // Setup Windows console control handler
+    SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
     
     // Set debug flag before framework_init()
     if (debug_mode) {
         g_config.enable_debug = true;
     }
     
-    // Initialize framework
-    if (framework_init(config_file) != FW_OK) {
+    // Initialize framework (including Control Socket Server!)
+    if (framework_init(config_file, control_port) != FW_OK) {
         fprintf(stderr, "Failed to initialize framework\n");
         return 1;
     }
@@ -502,6 +568,10 @@ int main(int argc, char** argv) {
     if (debug_mode) {
         logger_set_level(LOG_DEBUG);
     }
+    
+    printf("Framework is running. Press Ctrl+C to shutdown.\n");
+    printf("Connect console: python yuki-console.py\n");
+    printf("\n");
     
     // Run main loop
     framework_run();
