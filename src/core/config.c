@@ -1,5 +1,6 @@
 #include "yuki_frame/framework.h"
 #include "yuki_frame/config.h"
+#include "yuki_frame/tool.h"
 #include "yuki_frame/logger.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -257,6 +258,9 @@ int config_get_tools(ToolConfig** tools_out, int* count_out) {
                     tools[current_tool].restart_on_crash = false;
                     tools[current_tool].max_restarts = 3;
                     tools[current_tool].subscriptions[0] = '\0';
+                    tools[current_tool].restart_policy = RESTART_ALWAYS;  // NEW default
+                    tools[current_tool].max_queue_size = 100;  // NEW default
+                    tools[current_tool].queue_policy = QUEUE_POLICY_DROP_OLDEST;  // NEW default
                 }
             }
             continue;
@@ -282,6 +286,30 @@ int config_get_tools(ToolConfig** tools_out, int* count_out) {
                     tools[current_tool].restart_on_crash = (strcmp(value, "yes") == 0 || strcmp(value, "true") == 0);
                 } else if (strcmp(key, "max_restarts") == 0) {
                     tools[current_tool].max_restarts = atoi(value);
+                } else if (strcmp(key, "restart_policy") == 0) {
+                    // NEW: Parse restart policy
+                    if (strcmp(value, "on-demand") == 0) {
+                        tools[current_tool].restart_policy = RESTART_ON_DEMAND;
+                    } else if (strcmp(value, "always") == 0) {
+                        tools[current_tool].restart_policy = RESTART_ALWAYS;
+                    } else if (strcmp(value, "never") == 0) {
+                        tools[current_tool].restart_policy = RESTART_NEVER;
+                    }
+                } else if (strcmp(key, "max_queue_size") == 0) {
+                    // NEW: Parse queue size
+                    tools[current_tool].max_queue_size = atoi(value);
+                    if (tools[current_tool].max_queue_size <= 0) {
+                        tools[current_tool].max_queue_size = 100;
+                    }
+                } else if (strcmp(key, "queue_policy") == 0) {
+                    // NEW: Parse queue policy
+                    if (strcmp(value, "drop_oldest") == 0) {
+                        tools[current_tool].queue_policy = QUEUE_POLICY_DROP_OLDEST;
+                    } else if (strcmp(value, "drop_newest") == 0) {
+                        tools[current_tool].queue_policy = QUEUE_POLICY_DROP_NEWEST;
+                    } else if (strcmp(value, "block") == 0) {
+                        tools[current_tool].queue_policy = QUEUE_POLICY_BLOCK;
+                    }
                 } else if (strcmp(key, "subscribe_to") == 0) {
                     strncpy(tools[current_tool].subscriptions, value, 511);
                     tools[current_tool].subscriptions[511] = '\0';

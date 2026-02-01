@@ -205,6 +205,39 @@ int framework_init(const char* config_file, int control_port) {
 // Forward declaration
 void handle_console_command(const char* tool_name, const char* command);
 
+// Deliver queued events to running tools
+void deliver_queued_events(void) {
+    Tool* tool = tool_get_first();
+    
+    while (tool != NULL) {
+        // Only deliver to running tools with queued events
+        if (tool->status == TOOL_RUNNING && !tool_queue_is_empty(tool->inbox)) {
+            // Try to deliver next event
+            const char* event_msg = tool_queue_peek(tool->inbox);
+            if (event_msg) {
+                // Try non-blocking send
+                int result = tool_send_event_nonblocking(tool->name, event_msg);
+                
+                if (result == FW_OK) {
+                    // Successfully delivered, remove from queue
+                    tool_queue_remove(tool->inbox);
+                    LOG_TRACE("main", "Delivered event to %s (queue: %d remaining)", 
+                             tool->name, tool_queue_count(tool->inbox));
+                } else if (result == FW_ERROR_QUEUE_FULL) {
+                    // Pipe full, leave in queue, try next tool
+                    LOG_TRACE("main", "Tool %s pipe full, will retry", tool->name);
+                } else {
+                    // Other error, remove event and log
+                    tool_queue_remove(tool->inbox);
+                    LOG_ERROR("main", "Failed to deliver event to %s: %d", tool->name, result);
+                }
+            }
+        }
+        
+        tool = tool_get_next();
+    }
+}
+
 // Main loop
 void framework_run(void) {
     LOG_INFO("main", "Entering main loop");
@@ -214,10 +247,13 @@ void framework_run(void) {
     int line_pos = 0;
     
     while (g_running) {
-        // Process events
+        // 1. Route events from bus to tool queues
         event_process_queue();
         
-        // Read from tool stdout/stderr
+        // 2. Deliver queued events to tools (NEW!)
+        deliver_queued_events();
+        
+        // 3. Read from tool stdout/stderr
         Tool* tool = tool_get_first();
         while (tool) {
             if (tool->status == TOOL_RUNNING) {
@@ -238,13 +274,32 @@ void framework_run(void) {
                                 char* data = strtok(NULL, "");
                                 
                                 if (type && sender && data) {
-                                    if (strcmp(type, "COMMAND") == 0) {
+                                    // Handle control messages
+                                    if (strcmp(type, "SUBSCRIBE") == 0) {
+                                        // Tool subscribing to event type
+                                        LOG_DEBUG("main", "Tool %s subscribing to: %s", sender, data);
+                                        tool_subscribe(sender, data);
+                                    }
+                                    else if (strcmp(type, "TOOL_READY") == 0) {
+                                        // Tool ready signal
+                                        LOG_DEBUG("main", "Tool %s is ready: %s", sender, data);
+                                        
+                                        // Handle on-demand tools (mark as ready)
+                                        Tool* ready_tool = tool_find(sender);
+                                        if (ready_tool && ready_tool->is_on_demand && ready_tool->is_starting) {
+                                            ready_tool->is_starting = false;
+                                            LOG_INFO("main", "On-demand tool %s is now ready (queue: %d events)", 
+                                                    sender, tool_queue_count(ready_tool->inbox));
+                                        }
+                                    }
+                                    else if (strcmp(type, "COMMAND") == 0) {
                                         // Console command - handle it
                                         LOG_DEBUG("main", "Command from %s: %s", sender, data);
                                         handle_console_command(sender, data);
-                                    } else {
+                                    }
+                                    else {
                                         // Regular event - publish to event bus
-                                        LOG_DEBUG("main", "Event from %s: %s|%s", sender, type, data);
+                                        LOG_DEBUG("main", "Publishing event: %s from %s", type, sender);
                                         event_publish(type, sender, data);
                                     }
                                 }
@@ -424,10 +479,6 @@ void handle_console_command(const char* tool_name, const char* command) {
                              "  Name: %s\n", tool->name);
             offset += snprintf(response + offset, sizeof(response) - offset,
                              "  Command: %s\n", tool->command);
-            if (strlen(tool->description) > 0) {
-                offset += snprintf(response + offset, sizeof(response) - offset,
-                                 "  Description: %s\n", tool->description);
-            }
             offset += snprintf(response + offset, sizeof(response) - offset,
                              "  Status: %s\n",
                              tool->status == TOOL_RUNNING ? "RUNNING" :

@@ -44,6 +44,7 @@ set(FRAMEWORK_LIB_SOURCES
     src/core/logger.c
     src/core/event.c
     src/core/tool.c
+    src/core/tool_queue.c
     src/core/config.c
     src/core/control.c
     src/core/debug.c

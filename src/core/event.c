@@ -1,9 +1,12 @@
 #include "yuki_frame/framework.h"
 #include "yuki_frame/event.h"
+#include "yuki_frame/tool.h"
+#include "yuki_frame/tool_queue.h"
 #include "yuki_frame/logger.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 static MessageBus bus;
 
@@ -102,13 +105,84 @@ int event_format(const Event* event, char* buffer, size_t size) {
 }
 
 void event_process_queue(void) {
-    // TODO: Route events to subscribed tools
-    // For now, just clear the queue
+    // Route events to subscribed tools
     while (bus.count > 0) {
         Event* event = bus.queue[bus.head];
         if (event) {
-            LOG_TRACE("event", "Processing event: %s from %s", 
+            LOG_DEBUG("event", "Processing event: %s from %s", 
                      event->type, event->sender);
+            
+            // Deliver event to all subscribed tools
+            Tool* tool = tool_get_first();
+            int delivery_count = 0;
+            
+            while (tool != NULL) {
+                // Check if tool is subscribed to this event type
+                bool is_subscribed = false;
+                
+                // Check for wildcard subscription (*)
+                for (int i = 0; i < tool->subscription_count; i++) {
+                    // Trim leading/trailing quotes and whitespace from subscription
+                    char sub[256];
+                    strncpy(sub, tool->subscriptions[i], sizeof(sub) - 1);
+                    sub[sizeof(sub) - 1] = '\0';
+                    
+                    // Remove leading quote/whitespace
+                    char* s = sub;
+                    while (*s == '\'' || *s == '"' || *s == ' ') s++;
+                    
+                    // Remove trailing quote/whitespace
+                    char* end = s + strlen(s) - 1;
+                    while (end > s && (*end == '\'' || *end == '"' || *end == ' ' || *end == '\n' || *end == '\r')) {
+                        *end = '\0';
+                        end--;
+                    }
+                    
+                    if (strcmp(s, "*") == 0) {
+                        is_subscribed = true;
+                        break;
+                    }
+                    if (strcmp(s, event->type) == 0) {
+                        is_subscribed = true;
+                        break;
+                    }
+                }
+                
+                if (is_subscribed) {
+                    // Format event message: TYPE|sender|data
+                    char event_msg[8192];
+                    snprintf(event_msg, sizeof(event_msg), "%s|%s|%s\n",
+                             event->type, event->sender, event->data);
+                    
+                    // Add event to tool's inbox queue
+                    int result = tool_queue_add(tool->inbox, event_msg);
+                    
+                    if (result == FW_OK) {
+                        delivery_count++;
+                        LOG_DEBUG("event", "Queued %s for tool: %s (queue: %d/%d)", 
+                                 event->type, tool->name,
+                                 tool_queue_count(tool->inbox),
+                                 tool_queue_capacity(tool->inbox));
+                        
+                        // On-demand tool support
+                        if (tool->is_on_demand && tool->status == TOOL_STOPPED && !tool->is_starting) {
+                            LOG_INFO("event", "Starting on-demand tool: %s (triggered by %s)", 
+                                    tool->name, event->type);
+                            tool_start(tool->name);
+                            tool->is_starting = true;
+                        }
+                    } else {
+                        LOG_ERROR("event", "Failed to queue event for %s: %d", tool->name, result);
+                    }
+                }
+                
+                tool = tool_get_next();
+            }
+            
+            if (delivery_count > 0) {
+                LOG_DEBUG("event", "Event %s queued for %d tools", event->type, delivery_count);
+            }
+            
             free(event);
             bus.queue[bus.head] = NULL;
         }
